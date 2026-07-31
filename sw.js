@@ -1,4 +1,4 @@
-const CACHE = 'reposta-mejor-v1';
+const CACHE = 'reposta-mejor-v2';
 const SHELL = [
   './',
   './index.html',

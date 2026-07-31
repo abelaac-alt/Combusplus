@@ -6,7 +6,7 @@ import {
 } from './core.js';
 
 const API_BASE = 'https://api.precioil.es';
-const API_KEY_STORAGE = 'repostaMejor.precioilBrowserKey';
+const API_KEY_STORAGE = 'repostaMejor.precioilApiKey';
 
 const state = {
   position: null,
@@ -62,8 +62,15 @@ function getApiKey() {
 }
 
 function setApiStatus() {
-  const configured = Boolean(getApiKey());
-  elements.apiStatus.textContent = configured ? 'API configurada' : 'API sin configurar';
+  const key = getApiKey();
+  const configured = Boolean(key);
+  if (!configured) {
+    elements.apiStatus.textContent = 'API sin configurar';
+  } else if (key.startsWith('sk_live_')) {
+    elements.apiStatus.textContent = 'API servidor · modo personal';
+  } else {
+    elements.apiStatus.textContent = 'API navegador configurada';
+  }
   elements.apiStatus.classList.toggle('ready', configured);
 }
 
@@ -96,15 +103,11 @@ function openSettings() {
 function saveApiKey() {
   const key = elements.apiKeyInput.value.trim();
   if (!key) {
-    showSettingsError('Introduce una clave de navegador válida.');
+    showSettingsError('Introduce una clave API válida.');
     return;
   }
-  if (key.startsWith('sk_live_')) {
-    showSettingsError('Esta es una clave de servidor. Crea una browser key pk_live_ restringida a tu dominio.');
-    return;
-  }
-  if (!key.startsWith('pk_live_')) {
-    showSettingsError('La clave de navegador debe comenzar por pk_live_.');
+  if (!key.startsWith('pk_live_') && !key.startsWith('sk_live_')) {
+    showSettingsError('La clave debe comenzar por pk_live_ o sk_live_.');
     return;
   }
   localStorage.setItem(API_KEY_STORAGE, key);
@@ -163,9 +166,17 @@ async function fetchStations({ latitude, longitude, radius, apiKey }) {
     fields: 'current'
   });
 
-  const response = await fetch(`${API_BASE}/estaciones/radio?${params}`, {
-    headers: { 'X-API-Key': apiKey }
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/estaciones/radio?${params}`, {
+      headers: { 'X-API-Key': apiKey }
+    });
+  } catch {
+    const detail = apiKey.startsWith('sk_live_')
+      ? ' La clave sk_live_ puede estar restringida a llamadas desde servidor o por dirección IP.'
+      : '';
+    throw new Error(`No se pudo conectar con Precioil desde este navegador.${detail}`);
+  }
 
   let payload = null;
   try {
@@ -176,7 +187,12 @@ async function fetchStations({ latitude, longitude, radius, apiKey }) {
 
   if (!response.ok) {
     if (response.status === 401) throw new Error('La clave API no es válida o ha caducado.');
-    if (response.status === 403) throw new Error('La clave no permite este dominio o el endpoint /estaciones/radio.');
+    if (response.status === 403) {
+      const detail = apiKey.startsWith('sk_live_')
+        ? ' Puede estar restringida por IP o a uso desde servidor.'
+        : ' Comprueba el dominio autorizado y el endpoint /estaciones/radio.';
+      throw new Error(`La API ha rechazado esta clave.${detail}`);
+    }
     if (response.status === 429) throw new Error('Se ha alcanzado temporalmente el límite de consultas de la API.');
     throw new Error(payload?.message || payload?.error || `La API devolvió el error ${response.status}.`);
   }

@@ -185,13 +185,13 @@
   <dialog id="settingsDialog" class="settings-dialog">
     <form method="dialog" class="dialog-card" id="settingsForm">
       <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
-      <span class="eyebrow">CONFIGURACIÓN SEGURA</span>
-      <h2>Clave de navegador Precioil</h2>
-      <p>Introduce una clave <strong>pk_live_</strong> restringida al dominio de GitHub Pages. Se guarda solo en este navegador y nunca se añade al repositorio.</p>
+      <span class="eyebrow">CONFIGURACIÓN DE LA API</span>
+      <h2>Clave API Precioil</h2>
+      <p>Puedes usar una clave <strong>pk_live_</strong> o tu clave <strong>sk_live_</strong>. Se guarda solo en este navegador y nunca se añade al repositorio.</p>
 
       <label class="field">
-        <span>Browser API key</span>
-        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="pk_live_…">
+        <span>API key</span>
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="pk_live_… o sk_live_…">
       </label>
       <p id="settingsError" class="form-error" hidden></p>
 
@@ -200,8 +200,8 @@
         <button id="saveApiKey" class="primary-button small" type="button">Guardar en este dispositivo</button>
       </div>
       <div class="security-warning">
-        <strong>No uses una clave sk_live_.</strong>
-        <span>Las claves de servidor no deben incluirse en aplicaciones públicas.</span>
+        <strong>La clave sk_live_ queda habilitada para uso personal.</strong>
+        <span>No se publica en GitHub. Precioil puede bloquearla si está limitada por IP o exige llamadas desde servidor.</span>
       </div>
     </form>
   </dialog>

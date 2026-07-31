@@ -10,18 +10,20 @@ Aplicación web móvil para recomendar la gasolinera que ofrece el mejor resulta
 
 La app no se limita a ordenar por precio. Para cada estación calcula los litros comprados y descuenta el combustible estimado del desplazamiento. Recomienda la alternativa con más litros netos.
 
-## Seguridad de la API
+## Clave API de Precioil
 
-No añadas una clave `sk_live_` al repositorio ni al código de GitHub Pages. Esa clave es de servidor.
+La pantalla de configuración acepta:
 
-Para esta aplicación crea en Precioil Console una **browser key** `pk_live_`:
+- una clave de navegador `pk_live_`;
+- una clave de servidor `sk_live_` para uso personal.
 
-1. Tipo: navegador.
-2. Endpoint permitido: `/estaciones/radio`.
-3. Origin permitido para este proyecto: `https://abelaac-alt.github.io`.
-4. Revoca y sustituye cualquier clave de servidor que haya sido publicada o compartida accidentalmente.
+La clave se introduce desde el botón de ajustes y se guarda únicamente en `localStorage` del dispositivo. No está escrita en el código ni se sube a GitHub.
 
-La clave `pk_live_` se introduce desde el botón de ajustes de la aplicación y se almacena únicamente en `localStorage` del navegador. No queda incluida en GitHub.
+### Consideraciones para `sk_live_`
+
+La aplicación ya no bloquea este tipo de clave. No obstante, Precioil puede rechazar la petición si la clave está restringida por IP o configurada exclusivamente para llamadas desde servidor. En ese caso será necesario utilizar una clave `pk_live_` o colocar un pequeño proxy backend delante de la API.
+
+No incluyas nunca una clave `sk_live_` directamente en `src/app.js`, `index.html`, un commit o una URL.
 
 ## Publicación en GitHub Pages
 
@@ -60,5 +62,5 @@ Se ordenan las estaciones de mayor a menor cantidad de litros netos.
 
 - La ubicación se usa solo durante el cálculo.
 - La ubicación no se guarda.
-- La browser key se almacena únicamente en el dispositivo.
+- La API key se almacena únicamente en el dispositivo.
 - El service worker nunca intercepta ni almacena las solicitudes a Precioil.
