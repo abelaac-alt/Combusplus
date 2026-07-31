@@ -1,0 +1,18 @@
+{
+  "name": "Reposta Mejor",
+  "short_name": "Reposta Mejor",
+  "description": "Calcula qué gasolinera te conviene según precio, distancia, consumo e importe.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#024df7",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

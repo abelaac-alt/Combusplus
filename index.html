@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#024df7">
+  <meta name="description" content="Calcula qué gasolinera te conviene realmente según precio, distancia, consumo e importe de repostaje.">
+  <title>Reposta Mejor</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Reposta Mejor, inicio">
+        <span class="brand-mark" aria-hidden="true">R</span>
+        <span>
+          <strong>Reposta Mejor</strong>
+          <small>El ahorro real, contando el trayecto</small>
+        </span>
+      </a>
+      <button class="icon-button" id="openSettings" type="button" aria-label="Configurar API">⚙</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">COMPARADOR INTELIGENTE</span>
+          <h1>Descubre dónde te compensa repostar.</h1>
+          <p>Compara precio, distancia y combustible gastado en el desplazamiento.</p>
+        </div>
+        <div class="hero-badge" aria-hidden="true">
+          <span>€/L</span>
+          <strong>−</strong>
+          <span>KM</span>
+        </div>
+      </section>
+
+      <section class="panel form-panel" aria-labelledby="calculatorTitle">
+        <div class="section-heading">
+          <div>
+            <span class="step">01</span>
+            <h2 id="calculatorTitle">Datos del cálculo</h2>
+          </div>
+          <span class="status-pill" id="apiStatus">API sin configurar</span>
+        </div>
+
+        <form id="calculatorForm" novalidate>
+          <div class="field-grid">
+            <label class="field">
+              <span>Consumo medio</span>
+              <div class="input-with-unit">
+                <input id="consumption" name="consumption" type="number" min="1" max="30" step="0.1" value="6.5" inputmode="decimal" required>
+                <span>l/100 km</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Tipo de combustible</span>
+              <select id="fuelType" name="fuelType" required>
+                <option value="Gasolina95">Gasolina 95</option>
+                <option value="Diesel">Diésel A</option>
+                <option value="Gasolina98">Gasolina 98</option>
+                <option value="DieselPremium">Diésel Premium</option>
+                <option value="GLP">GLP</option>
+                <option value="DieselB">Diésel B</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Importe del repostaje</span>
+              <div class="input-with-unit">
+                <input id="amount" name="amount" type="number" min="5" max="500" step="1" value="50" inputmode="decimal" required>
+                <span>€</span>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Radio de búsqueda</span>
+              <div class="input-with-unit">
+                <input id="radius" name="radius" type="number" min="1" max="50" step="1" value="15" inputmode="numeric" required>
+                <span>km</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="trip-selector" role="group" aria-label="Tipo de trayecto">
+            <span>Coste del desplazamiento</span>
+            <label><input type="radio" name="tripMode" value="roundtrip" checked> Ida y vuelta</label>
+            <label><input type="radio" name="tripMode" value="oneway"> Solo ida</label>
+          </div>
+
+          <div class="location-box">
+            <div>
+              <strong id="locationTitle">Ubicación pendiente</strong>
+              <span id="locationText">Usaremos el GPS únicamente para este cálculo.</span>
+            </div>
+            <button class="secondary-button" id="locateButton" type="button">Usar mi ubicación</button>
+          </div>
+
+          <p class="form-error" id="formError" role="alert" hidden></p>
+
+          <button class="primary-button" id="calculateButton" type="submit">
+            <span>Calcular mejor gasolinera</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </form>
+      </section>
+
+      <section id="loadingSection" class="panel loading-panel" hidden aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        <div>
+          <strong>Analizando gasolineras cercanas…</strong>
+          <p>Calculamos precio, litros obtenidos y coste del trayecto.</p>
+        </div>
+      </section>
+
+      <section id="resultsSection" hidden aria-live="polite">
+        <article class="recommendation-card">
+          <div class="recommendation-topline">
+            <span class="recommendation-label">MEJOR OPCIÓN REAL</span>
+            <span id="resultUpdated" class="result-updated"></span>
+          </div>
+          <h2 id="bestName">Gasolinera recomendada</h2>
+          <p id="bestAddress" class="best-address"></p>
+
+          <div class="headline-metrics">
+            <div>
+              <span>Precio</span>
+              <strong id="bestPrice">—</strong>
+            </div>
+            <div>
+              <span>Distancia</span>
+              <strong id="bestDistance">—</strong>
+            </div>
+            <div>
+              <span>Litros netos</span>
+              <strong id="bestNetLiters">—</strong>
+            </div>
+          </div>
+
+          <div class="saving-banner">
+            <span id="savingIcon" aria-hidden="true">✓</span>
+            <p id="savingText">Esta es la opción que deja más combustible útil tras el desplazamiento.</p>
+          </div>
+
+          <div class="detail-grid">
+            <div><span>Litros comprados</span><strong id="bestPurchased">—</strong></div>
+            <div><span>Combustible del trayecto</span><strong id="bestTripFuel">—</strong></div>
+            <div><span>Coste efectivo</span><strong id="bestEffectivePrice">—</strong></div>
+            <div><span>Trayecto estimado</span><strong id="bestTripKm">—</strong></div>
+          </div>
+
+          <a id="mapsLink" class="maps-button" target="_blank" rel="noopener noreferrer">Abrir ruta en Google Maps</a>
+        </article>
+
+        <section class="panel ranking-panel" aria-labelledby="rankingTitle">
+          <div class="section-heading compact">
+            <div>
+              <span class="step">02</span>
+              <h2 id="rankingTitle">Comparativa</h2>
+            </div>
+            <span id="stationCount" class="station-count"></span>
+          </div>
+          <div id="rankingList" class="ranking-list"></div>
+        </section>
+
+        <p class="calculation-note">Estimación basada en distancia geográfica ajustada a carretera. El tráfico, desvíos reales y cambios de precio pueden modificar el resultado.</p>
+      </section>
+
+      <section class="panel explainer-panel">
+        <span class="step">¿CÓMO DECIDE?</span>
+        <h2>No basta con buscar el precio más bajo.</h2>
+        <p>La recomendación maximiza los litros que conservas después de repostar y realizar el trayecto indicado. Una gasolinera algo más cara puede ser mejor si está mucho más cerca.</p>
+      </section>
+    </main>
+
+    <footer>
+      <span>Datos de precios: Precioil.es</span>
+      <span>La ubicación no se almacena.</span>
+    </footer>
+  </div>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form method="dialog" class="dialog-card" id="settingsForm">
+      <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
+      <span class="eyebrow">CONFIGURACIÓN SEGURA</span>
+      <h2>Clave de navegador Precioil</h2>
+      <p>Introduce una clave <strong>pk_live_</strong> restringida al dominio de GitHub Pages. Se guarda solo en este navegador y nunca se añade al repositorio.</p>
+
+      <label class="field">
+        <span>Browser API key</span>
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="pk_live_…">
+      </label>
+      <p id="settingsError" class="form-error" hidden></p>
+
+      <div class="dialog-actions">
+        <button id="clearApiKey" class="text-button" type="button">Borrar clave guardada</button>
+        <button id="saveApiKey" class="primary-button small" type="button">Guardar en este dispositivo</button>
+      </div>
+      <div class="security-warning">
+        <strong>No uses una clave sk_live_.</strong>
+        <span>Las claves de servidor no deben incluirse en aplicaciones públicas.</span>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="rankingItemTemplate">
+    <article class="ranking-item">
+      <div class="rank-number"></div>
+      <div class="rank-main">
+        <strong class="rank-name"></strong>
+        <span class="rank-address"></span>
+        <div class="rank-meta">
+          <span class="rank-distance"></span>
+          <span class="rank-net"></span>
+        </div>
+      </div>
+      <div class="rank-price"></div>
+      <a class="rank-route" target="_blank" rel="noopener noreferrer" aria-label="Abrir ruta">↗</a>
+    </article>
+  </template>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
