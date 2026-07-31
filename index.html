@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#024df7">
-  <meta name="description" content="Calcula qué gasolinera te conviene realmente según precio, distancia, consumo e importe de repostaje.">
-  <title>Reposta Mejor</title>
+  <meta name="theme-color" content="#0f62fe">
+  <meta name="description" content="Combusplus te ayuda a elegir la gasolinera más conveniente según precio, distancia, consumo y vehículos guardados.">
+  <title>Combusplus</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./assets/styles.css">
@@ -13,172 +13,306 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="./" aria-label="Reposta Mejor, inicio">
-        <span class="brand-mark" aria-hidden="true">R</span>
-        <span>
-          <strong>Reposta Mejor</strong>
-          <small>El ahorro real, contando el trayecto</small>
+      <a class="brand" href="./" aria-label="Combusplus, inicio">
+        <img class="brand-logo" src="./assets/logo.svg" alt="Combusplus">
+        <span class="brand-copy">
+          <strong>Combusplus</strong>
+          <small>Ahorro inteligente en cada repostaje</small>
         </span>
       </a>
-      <button class="icon-button" id="openSettings" type="button" aria-label="Configurar API">⚙</button>
+      <div class="topbar-actions">
+        <span class="status-pill" id="apiStatus">API sin configurar</span>
+        <button class="icon-button" id="openSettings" type="button" aria-label="Configurar API">⚙</button>
+      </div>
     </header>
 
     <main>
       <section class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">COMPARADOR INTELIGENTE</span>
-          <h1>Descubre dónde te compensa repostar.</h1>
-          <p>Compara precio, distancia y combustible gastado en el desplazamiento.</p>
+          <span class="eyebrow">PLANIFICA · COMPARA · AHORRA</span>
+          <h1>Encuentra la gasolinera que más te compensa.</h1>
+          <p>Guarda tus vehículos, compara el ahorro real y consulta todas las estaciones cercanas con sus combustibles disponibles.</p>
         </div>
-        <div class="hero-badge" aria-hidden="true">
-          <span>€/L</span>
-          <strong>−</strong>
-          <span>KM</span>
-        </div>
-      </section>
-
-      <section class="panel form-panel" aria-labelledby="calculatorTitle">
-        <div class="section-heading">
-          <div>
-            <span class="step">01</span>
-            <h2 id="calculatorTitle">Datos del cálculo</h2>
+        <div class="hero-panel">
+          <div class="hero-stat">
+            <span>Vehículos guardados</span>
+            <strong id="heroVehicleCount">0</strong>
           </div>
-          <span class="status-pill" id="apiStatus">API sin configurar</span>
-        </div>
-
-        <form id="calculatorForm" novalidate>
-          <div class="field-grid">
-            <label class="field">
-              <span>Consumo medio</span>
-              <div class="input-with-unit">
-                <input id="consumption" name="consumption" type="number" min="1" max="30" step="0.1" value="6.5" inputmode="decimal" required>
-                <span>l/100 km</span>
-              </div>
-            </label>
-
-            <label class="field">
-              <span>Tipo de combustible</span>
-              <select id="fuelType" name="fuelType" required>
-                <option value="Gasolina95">Gasolina 95</option>
-                <option value="Diesel">Diésel A</option>
-                <option value="Gasolina98">Gasolina 98</option>
-                <option value="DieselPremium">Diésel Premium</option>
-                <option value="GLP">GLP</option>
-                <option value="DieselB">Diésel B</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Importe del repostaje</span>
-              <div class="input-with-unit">
-                <input id="amount" name="amount" type="number" min="5" max="500" step="1" value="50" inputmode="decimal" required>
-                <span>€</span>
-              </div>
-            </label>
-
-            <label class="field">
-              <span>Radio de búsqueda</span>
-              <div class="input-with-unit">
-                <input id="radius" name="radius" type="number" min="1" max="50" step="1" value="15" inputmode="numeric" required>
-                <span>km</span>
-              </div>
-            </label>
+          <div class="hero-stat">
+            <span>Modo</span>
+            <strong>Personal</strong>
           </div>
-
-          <div class="trip-selector" role="group" aria-label="Tipo de trayecto">
-            <span>Coste del desplazamiento</span>
-            <label><input type="radio" name="tripMode" value="roundtrip" checked> Ida y vuelta</label>
-            <label><input type="radio" name="tripMode" value="oneway"> Solo ida</label>
-          </div>
-
-          <div class="location-box">
-            <div>
-              <strong id="locationTitle">Ubicación pendiente</strong>
-              <span id="locationText">Usaremos el GPS únicamente para este cálculo.</span>
-            </div>
-            <button class="secondary-button" id="locateButton" type="button">Usar mi ubicación</button>
-          </div>
-
-          <p class="form-error" id="formError" role="alert" hidden></p>
-
-          <button class="primary-button" id="calculateButton" type="submit">
-            <span>Calcular mejor gasolinera</span>
-            <span aria-hidden="true">→</span>
-          </button>
-        </form>
-      </section>
-
-      <section id="loadingSection" class="panel loading-panel" hidden aria-live="polite">
-        <div class="spinner" aria-hidden="true"></div>
-        <div>
-          <strong>Analizando gasolineras cercanas…</strong>
-          <p>Calculamos precio, litros obtenidos y coste del trayecto.</p>
         </div>
       </section>
 
-      <section id="resultsSection" hidden aria-live="polite">
-        <article class="recommendation-card">
-          <div class="recommendation-topline">
-            <span class="recommendation-label">MEJOR OPCIÓN REAL</span>
-            <span id="resultUpdated" class="result-updated"></span>
-          </div>
-          <h2 id="bestName">Gasolinera recomendada</h2>
-          <p id="bestAddress" class="best-address"></p>
+      <nav class="menu-tabs" aria-label="Secciones principales">
+        <button class="menu-tab is-active" type="button" data-view="compare">Comparador</button>
+        <button class="menu-tab" type="button" data-view="vehicles">Vehículos</button>
+        <button class="menu-tab" type="button" data-view="stations">Gasolineras</button>
+      </nav>
 
-          <div class="headline-metrics">
+      <section class="view-section is-active" data-view-panel="compare">
+        <section class="panel form-panel" aria-labelledby="calculatorTitle">
+          <div class="section-heading">
             <div>
-              <span>Precio</span>
-              <strong id="bestPrice">—</strong>
+              <span class="step">01</span>
+              <h2 id="calculatorTitle">Calculadora de ahorro</h2>
             </div>
-            <div>
-              <span>Distancia</span>
-              <strong id="bestDistance">—</strong>
-            </div>
-            <div>
-              <span>Litros netos</span>
-              <strong id="bestNetLiters">—</strong>
-            </div>
+            <span class="section-badge">Recomendación automática</span>
           </div>
 
-          <div class="saving-banner">
-            <span id="savingIcon" aria-hidden="true">✓</span>
-            <p id="savingText">Esta es la opción que deja más combustible útil tras el desplazamiento.</p>
-          </div>
-
-          <div class="detail-grid">
-            <div><span>Litros comprados</span><strong id="bestPurchased">—</strong></div>
-            <div><span>Combustible del trayecto</span><strong id="bestTripFuel">—</strong></div>
-            <div><span>Coste efectivo</span><strong id="bestEffectivePrice">—</strong></div>
-            <div><span>Trayecto estimado</span><strong id="bestTripKm">—</strong></div>
-          </div>
-
-          <a id="mapsLink" class="maps-button" target="_blank" rel="noopener noreferrer">Abrir ruta en Google Maps</a>
-        </article>
-
-        <section class="panel ranking-panel" aria-labelledby="rankingTitle">
-          <div class="section-heading compact">
-            <div>
-              <span class="step">02</span>
-              <h2 id="rankingTitle">Comparativa</h2>
+          <form id="calculatorForm" novalidate>
+            <div class="vehicle-strip">
+              <label class="field">
+                <span>Vehículo guardado</span>
+                <select id="vehicleSelect" name="vehicleSelect">
+                  <option value="">Usar datos manuales</option>
+                </select>
+              </label>
+              <button class="secondary-button compact" id="goVehicles" type="button">Gestionar vehículos</button>
             </div>
-            <span id="stationCount" class="station-count"></span>
-          </div>
-          <div id="rankingList" class="ranking-list"></div>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Consumo medio</span>
+                <div class="input-with-unit">
+                  <input id="consumption" name="consumption" type="number" min="1" max="30" step="0.1" value="6.5" inputmode="decimal" required>
+                  <span>l/100 km</span>
+                </div>
+              </label>
+
+              <label class="field">
+                <span>Tipo de combustible</span>
+                <select id="fuelType" name="fuelType" required>
+                  <option value="Gasolina95">Gasolina 95</option>
+                  <option value="Diesel">Diésel A</option>
+                  <option value="Gasolina98">Gasolina 98</option>
+                  <option value="DieselPremium">Diésel Premium</option>
+                  <option value="GLP">GLP</option>
+                  <option value="DieselB">Diésel B</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Importe del repostaje</span>
+                <div class="input-with-unit">
+                  <input id="amount" name="amount" type="number" min="5" max="500" step="1" value="50" inputmode="decimal" required>
+                  <span>€</span>
+                </div>
+              </label>
+
+              <label class="field">
+                <span>Radio de búsqueda</span>
+                <div class="input-with-unit">
+                  <input id="radius" name="radius" type="number" min="1" max="50" step="1" value="15" inputmode="numeric" required>
+                  <span>km</span>
+                </div>
+              </label>
+            </div>
+
+            <div class="trip-selector" role="group" aria-label="Tipo de trayecto">
+              <span>Coste del desplazamiento</span>
+              <label><input type="radio" name="tripMode" value="roundtrip" checked> Ida y vuelta</label>
+              <label><input type="radio" name="tripMode" value="oneway"> Solo ida</label>
+            </div>
+
+            <div class="location-box">
+              <div>
+                <strong id="locationTitle">Ubicación pendiente</strong>
+                <span id="locationText">Usaremos el GPS solo para calcular y consultar estaciones cercanas.</span>
+              </div>
+              <button class="secondary-button" id="locateButton" type="button">Usar mi ubicación</button>
+            </div>
+
+            <p class="form-error" id="formError" role="alert" hidden></p>
+
+            <button class="primary-button" id="calculateButton" type="submit">
+              <span>Calcular mejor gasolinera</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </form>
         </section>
 
-        <p class="calculation-note">Estimación basada en distancia geográfica ajustada a carretera. El tráfico, desvíos reales y cambios de precio pueden modificar el resultado.</p>
+        <section id="loadingSection" class="panel loading-panel" hidden aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <div>
+            <strong>Analizando gasolineras cercanas…</strong>
+            <p>Calculamos precio, litros obtenidos y coste del trayecto.</p>
+          </div>
+        </section>
+
+        <section id="resultsSection" hidden aria-live="polite">
+          <article class="recommendation-card">
+            <div class="recommendation-topline">
+              <span class="recommendation-label">MEJOR OPCIÓN REAL</span>
+              <span id="resultUpdated" class="result-updated"></span>
+            </div>
+            <h2 id="bestName">Gasolinera recomendada</h2>
+            <p id="bestAddress" class="best-address"></p>
+
+            <div class="headline-metrics">
+              <div>
+                <span>Precio</span>
+                <strong id="bestPrice">—</strong>
+              </div>
+              <div>
+                <span>Distancia</span>
+                <strong id="bestDistance">—</strong>
+              </div>
+              <div>
+                <span>Litros netos</span>
+                <strong id="bestNetLiters">—</strong>
+              </div>
+            </div>
+
+            <div class="saving-banner">
+              <span aria-hidden="true">✓</span>
+              <p id="savingText">Esta es la opción que deja más combustible útil tras el desplazamiento.</p>
+            </div>
+
+            <div class="detail-grid">
+              <div><span>Litros comprados</span><strong id="bestPurchased">—</strong></div>
+              <div><span>Combustible del trayecto</span><strong id="bestTripFuel">—</strong></div>
+              <div><span>Coste efectivo</span><strong id="bestEffectivePrice">—</strong></div>
+              <div><span>Trayecto estimado</span><strong id="bestTripKm">—</strong></div>
+            </div>
+
+            <a id="mapsLink" class="maps-button" target="_blank" rel="noopener noreferrer">Abrir ruta en Google Maps</a>
+          </article>
+
+          <section class="panel ranking-panel" aria-labelledby="rankingTitle">
+            <div class="section-heading compact">
+              <div>
+                <span class="step">02</span>
+                <h2 id="rankingTitle">Comparativa</h2>
+              </div>
+              <span id="stationCount" class="station-count"></span>
+            </div>
+            <div id="rankingList" class="ranking-list"></div>
+          </section>
+
+          <p class="calculation-note">Estimación basada en distancia geográfica ajustada a carretera. El tráfico, desvíos reales y cambios de precio pueden modificar el resultado.</p>
+        </section>
       </section>
 
-      <section class="panel explainer-panel">
-        <span class="step">¿CÓMO DECIDE?</span>
-        <h2>No basta con buscar el precio más bajo.</h2>
-        <p>La recomendación maximiza los litros que conservas después de repostar y realizar el trayecto indicado. Una gasolinera algo más cara puede ser mejor si está mucho más cerca.</p>
+      <section class="view-section" data-view-panel="vehicles">
+        <section class="panel vehicles-panel">
+          <div class="section-heading">
+            <div>
+              <span class="step">PERFIL</span>
+              <h2>Mis vehículos</h2>
+            </div>
+            <span class="section-badge">Guardado automático</span>
+          </div>
+
+          <form id="vehicleForm" novalidate>
+            <input id="vehicleId" type="hidden">
+            <div class="field-grid">
+              <label class="field">
+                <span>Nombre del vehículo</span>
+                <input id="vehicleName" type="text" maxlength="60" placeholder="Ej. Audi A3 1.6 TDI" required>
+              </label>
+              <label class="field">
+                <span>Matrícula o referencia</span>
+                <input id="vehiclePlate" type="text" maxlength="20" placeholder="Opcional">
+              </label>
+              <label class="field">
+                <span>Consumo medio</span>
+                <div class="input-with-unit">
+                  <input id="vehicleConsumption" type="number" min="1" max="30" step="0.1" value="6.0" required>
+                  <span>l/100 km</span>
+                </div>
+              </label>
+              <label class="field">
+                <span>Combustible</span>
+                <select id="vehicleFuel" required>
+                  <option value="Gasolina95">Gasolina 95</option>
+                  <option value="Diesel">Diésel A</option>
+                  <option value="Gasolina98">Gasolina 98</option>
+                  <option value="DieselPremium">Diésel Premium</option>
+                  <option value="GLP">GLP</option>
+                  <option value="DieselB">Diésel B</option>
+                </select>
+              </label>
+            </div>
+
+            <p class="form-error" id="vehiclesError" role="alert" hidden></p>
+
+            <div class="inline-actions">
+              <button class="primary-button small" id="saveVehicleButton" type="submit">Guardar vehículo</button>
+              <button class="secondary-button compact" id="resetVehicleForm" type="button">Nuevo vehículo</button>
+            </div>
+          </form>
+
+          <div class="vehicle-list-header">
+            <strong>Vehículos guardados</strong>
+            <span id="vehicleCountText">0 vehículos</span>
+          </div>
+          <div id="vehicleList" class="vehicle-list"></div>
+        </section>
+      </section>
+
+      <section class="view-section" data-view-panel="stations">
+        <section class="panel stations-panel">
+          <div class="section-heading">
+            <div>
+              <span class="step">EXPLORADOR</span>
+              <h2>Gasolineras cercanas</h2>
+            </div>
+            <span class="section-badge">Listado por distancia</span>
+          </div>
+
+          <form id="browseForm" novalidate>
+            <div class="field-grid narrow-grid">
+              <label class="field">
+                <span>Rango de kilómetros</span>
+                <div class="input-with-unit">
+                  <input id="browseRadius" type="number" min="1" max="50" step="1" value="10" required>
+                  <span>km</span>
+                </div>
+              </label>
+              <label class="field">
+                <span>Ordenación</span>
+                <select id="browseSort">
+                  <option value="distance">Distancia</option>
+                  <option value="name">Nombre</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="location-box compact-box">
+              <div>
+                <strong id="browseLocationTitle">Ubicación pendiente</strong>
+                <span id="browseLocationText">Necesitamos tu posición para mostrar estaciones cercanas.</span>
+              </div>
+              <button class="secondary-button" id="browseLocateButton" type="button">Actualizar ubicación</button>
+            </div>
+
+            <p class="form-error" id="browseError" role="alert" hidden></p>
+
+            <div class="inline-actions">
+              <button class="primary-button small" id="loadStationsButton" type="submit">Mostrar gasolineras</button>
+            </div>
+          </form>
+
+          <section id="browseLoadingSection" class="loading-inline" hidden aria-live="polite">
+            <div class="spinner small-spinner" aria-hidden="true"></div>
+            <span>Cargando estaciones cercanas…</span>
+          </section>
+
+          <div class="list-summary">
+            <strong id="browseSummaryTitle">Listado de estaciones</strong>
+            <span id="browseSummaryText">Sin datos cargados.</span>
+          </div>
+
+          <div id="stationBrowserList" class="station-browser-list"></div>
+        </section>
       </section>
     </main>
 
     <footer>
       <span>Datos de precios: Precioil.es</span>
-      <span>La ubicación no se almacena.</span>
+      <span>Los vehículos se guardan en tu navegador. La ubicación no se almacena.</span>
     </footer>
   </div>
 
@@ -219,6 +353,40 @@
       </div>
       <div class="rank-price"></div>
       <a class="rank-route" target="_blank" rel="noopener noreferrer" aria-label="Abrir ruta">↗</a>
+    </article>
+  </template>
+
+  <template id="vehicleCardTemplate">
+    <article class="vehicle-card">
+      <div class="vehicle-card-main">
+        <div class="vehicle-icon" aria-hidden="true">🚗</div>
+        <div>
+          <strong class="vehicle-card-name"></strong>
+          <span class="vehicle-card-meta"></span>
+        </div>
+      </div>
+      <div class="vehicle-card-stats"></div>
+      <div class="vehicle-card-actions">
+        <button class="secondary-button compact select-vehicle" type="button">Usar</button>
+        <button class="ghost-button edit-vehicle" type="button">Editar</button>
+        <button class="ghost-button danger delete-vehicle" type="button">Eliminar</button>
+      </div>
+    </article>
+  </template>
+
+  <template id="stationBrowserItemTemplate">
+    <article class="station-card">
+      <div class="station-card-top">
+        <div>
+          <strong class="station-name"></strong>
+          <span class="station-address"></span>
+        </div>
+        <div class="station-distance"></div>
+      </div>
+      <div class="fuel-chip-list"></div>
+      <div class="station-card-actions">
+        <a class="route-button" target="_blank" rel="noopener noreferrer">Abrir ruta</a>
+      </div>
     </article>
   </template>
 

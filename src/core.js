@@ -86,13 +86,7 @@ function normalizeDistance(rawDistance) {
   return value > 100 ? value / 1000 : value;
 }
 
-export function normalizeStation(raw, fuelKey, origin) {
-  const fuel = FUEL_DEFINITIONS[fuelKey];
-  if (!fuel) return null;
-
-  const price = parseNumeric(getByAliases(raw, fuel.aliases));
-  if (!price || price <= 0 || price > 5) return null;
-
+function baseStation(raw, origin) {
   const latitude = parseNumeric(getByAliases(raw, ['latitud', 'latitude', 'lat', 'Latitud']));
   const longitude = parseNumeric(getByAliases(raw, ['longitud', 'longitude', 'lon', 'lng', 'Longitud']));
   let distanceKm = normalizeDistance(getByAliases(raw, ['distancia', 'distance', 'distanciaKm', 'distanceKm', 'kilometros']));
@@ -113,12 +107,45 @@ export function normalizeStation(raw, fuelKey, origin) {
     id: getByAliases(raw, ['idEstacion', 'id', 'stationId']) || `${name}-${latitude}-${longitude}`,
     name: String(name),
     address: addressParts.join(' · ') || 'Dirección no disponible',
-    price,
     latitude,
     longitude,
     distanceKm,
     updatedAt: getByAliases(raw, ['updatedAt', 'fechaActualizacion', 'fecha', 'date']) || null,
     raw
+  };
+}
+
+export function extractAvailableFuelPrices(raw) {
+  return Object.entries(FUEL_DEFINITIONS)
+    .map(([key, def]) => {
+      const price = parseNumeric(getByAliases(raw, def.aliases));
+      if (!price || price <= 0 || price > 5) return null;
+      return { key, label: def.label, price };
+    })
+    .filter(Boolean);
+}
+
+export function normalizeStation(raw, fuelKey, origin) {
+  const station = baseStation(raw, origin);
+  const fuel = FUEL_DEFINITIONS[fuelKey];
+  if (!station || !fuel) return null;
+
+  const price = parseNumeric(getByAliases(raw, fuel.aliases));
+  if (!price || price <= 0 || price > 5) return null;
+
+  return {
+    ...station,
+    price
+  };
+}
+
+export function normalizeStationForList(raw, origin) {
+  const station = baseStation(raw, origin);
+  if (!station) return null;
+
+  return {
+    ...station,
+    fuels: extractAvailableFuelPrices(raw)
   };
 }
 

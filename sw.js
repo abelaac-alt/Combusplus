@@ -1,9 +1,10 @@
-const CACHE = 'reposta-mejor-v2';
+const CACHE = 'combusplus-v3';
 const SHELL = [
   './',
   './index.html',
   './assets/styles.css',
   './assets/icon.svg',
+  './assets/logo.svg',
   './src/app.js',
   './src/core.js',
   './manifest.webmanifest'

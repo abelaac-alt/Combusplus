@@ -1,12 +1,12 @@
 {
-  "name": "Reposta Mejor",
-  "short_name": "Reposta Mejor",
-  "description": "Calcula qué gasolinera te conviene según precio, distancia, consumo e importe.",
+  "name": "Combusplus",
+  "short_name": "Combusplus",
+  "description": "Calcula la gasolinera que más te conviene, guarda tus vehículos y consulta estaciones cercanas.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#024df7",
+  "background_color": "#f3f6fb",
+  "theme_color": "#0f62fe",
   "icons": [
     {
       "src": "./assets/icon.svg",
