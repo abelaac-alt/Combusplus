@@ -1,15 +1,15 @@
 <svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="g1" x1="30" y1="24" x2="210" y2="214" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0F62FE"/>
-      <stop offset="1" stop-color="#26C6DA"/>
-    </linearGradient>
-    <linearGradient id="g2" x1="60" y1="68" x2="182" y2="168" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#DFF6FF"/>
+    <linearGradient id="g" x1="36" y1="24" x2="197" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF6256"/>
+      <stop offset="1" stop-color="#B90F1C"/>
     </linearGradient>
   </defs>
-  <rect x="18" y="18" width="204" height="204" rx="56" fill="url(#g1)"/>
-  <path d="M77 78C90.5 65.5 106 59 125 59C148.6 59 167.3 69 180 89.2L158.5 103C151 91.4 139.9 85.6 125.2 85.6C111.9 85.6 101.6 89.8 94.4 98.3C87.1 106.8 83.5 117.2 83.5 129.7C83.5 142.4 87.3 152.9 95 161.3C102.7 169.6 113.6 173.8 127.7 173.8C141.5 173.8 152.8 168.8 161.5 158.8H130.5V136.3H190.4C190.8 140.1 191 143.3 191 146C191 168.3 184.9 186 172.8 199.1C160.7 212.2 145.3 218.8 126.5 218.8C104.9 218.8 86.9 210.4 72.3 193.4C57.8 176.4 50.5 155.3 50.5 130C50.5 109 59.3 91.7 77 78Z" fill="url(#g2)"/>
-  <path d="M168.5 43.5L186.8 61.8L146.5 102.1L128.2 83.8L168.5 43.5Z" fill="#FFD24A"/>
+  <rect x="18" y="18" width="204" height="204" rx="56" fill="#111214"/>
+  <path d="M56 144C56 105.34 87.3401 74 126 74H177C183.627 74 189 79.3726 189 86V154C189 160.627 183.627 166 177 166H126C87.3401 166 56 134.66 56 96V144Z" fill="url(#g)"/>
+  <path d="M43 88C43 75.2975 53.2975 65 66 65H113C125.703 65 136 75.2975 136 88V151C136 163.703 125.703 174 113 174H66C53.2975 174 43 163.703 43 151V88Z" fill="#F4F0EA"/>
+  <path d="M74 96C74 88.268 80.268 82 88 82H92C99.732 82 106 88.268 106 96V142C106 149.732 99.732 156 92 156H88C80.268 156 74 149.732 74 142V96Z" fill="#111214"/>
+  <path d="M148 101C148 93.268 154.268 87 162 87H166C173.732 87 180 93.268 180 101V139C180 146.732 173.732 153 166 153H162C154.268 153 148 146.732 148 139V101Z" fill="#F4F0EA"/>
+  <circle cx="90" cy="188" r="13" fill="#B90F1C"/>
+  <circle cx="163" cy="188" r="13" fill="#F4F0EA"/>
 </svg>
