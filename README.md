@@ -1,15 +1,30 @@
-# Combusplus
+# Combusplus 4.0
 
-Aplicación estática para GitHub Pages que permite:
+Aplicación web móvil preparada para GitHub Pages.
 
-- calcular la gasolinera más conveniente según consumo, combustible, importe y distancia
-- guardar varios vehículos en el navegador
-- consultar gasolineras cercanas dentro de un rango de kilómetros
-- usar claves `pk_live_` o `sk_live_` de Precioil guardadas solo en local
+## Funciones
 
-## Publicación en GitHub Pages
+- recomendación de la gasolinera más rentable según consumo, importe, distancia y combustible
+- perfiles con múltiples vehículos
+- listado de estaciones y precios disponibles
+- Google Maps integrado con marcadores de gasolineras
+- gasolineras favoritas guardadas en el navegador
+- registro de simulaciones como REPOSTADO
+- historial, litros, importe total y ahorro acumulado
+- instalación como PWA
 
-1. Sube el contenido del proyecto a un repositorio.
-2. Activa GitHub Pages desde la rama principal y la carpeta raíz.
-3. Abre la web publicada.
-4. Introduce tu clave API desde el botón de configuración.
+## Configuración
+
+Desde Ajustes se introducen:
+
+1. La clave de Precioil (`pk_live_` o `sk_live_`).
+2. Una clave de Google Maps JavaScript API.
+3. Opcionalmente, un Map ID de Google Maps.
+
+Las claves se guardan únicamente en `localStorage` y no forman parte del repositorio.
+
+Para producción, restringe la clave de Google Maps por referente HTTP al dominio publicado y limita la clave a Maps JavaScript API.
+
+## GitHub Pages
+
+Sube el contenido de esta carpeta al repositorio y activa GitHub Pages desde la rama principal y la carpeta raíz.
