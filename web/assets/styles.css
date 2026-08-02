@@ -184,3 +184,26 @@ html,body,.app-shell,main,.page{overscroll-behavior-x:none;touch-action:pan-y}
 .map-fallback-note{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(17,18,20,.92);color:#fff;padding:8px 10px;font-size:10px;line-height:1.35;z-index:2;display:flex;justify-content:space-between;gap:10px;align-items:center}
 .map-fallback-note a{color:#fff;text-decoration:underline;font-weight:700;white-space:nowrap}
 @media(max-width:520px){.map-fallback-note{align-items:flex-start;flex-direction:column}.map-fallback-note a{white-space:normal}}
+
+
+/* Comparador Combusplus 7.4 */
+.comparison-dialog{width:min(940px,calc(100% - 24px));max-height:calc(100dvh - 24px);border:0;padding:0;background:transparent}
+.comparison-panel{position:relative;background:#fff;color:#17191d;border-top:5px solid #b3131b;padding:28px;box-shadow:0 24px 70px rgba(0,0,0,.34);overflow:auto;max-height:calc(100dvh - 24px)}
+.comparison-heading{padding-right:48px;border-bottom:1px solid #d9dce2;padding-bottom:18px;margin-bottom:20px}
+.comparison-heading h2{margin:5px 0 7px;font-size:clamp(1.65rem,4vw,2.45rem);line-height:1.05}
+.comparison-heading p{margin:0;color:#626873}
+.comparison-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.comparison-card{border:1px solid #d6d9df;padding:18px;background:#f7f8fa}
+.comparison-card.comparison-best{border-color:#b3131b;box-shadow:inset 5px 0 0 #b3131b;background:#fff7f7}
+.comparison-tag{display:inline-block;font-size:.74rem;font-weight:900;letter-spacing:.11em;color:#b3131b;margin-bottom:10px}
+.comparison-tag.neutral{color:#505762}
+.comparison-card h3{margin:0 0 14px;font-size:1.14rem;line-height:1.25}
+.comparison-card dl{margin:0;display:grid;gap:9px}
+.comparison-card dl div{display:flex;justify-content:space-between;gap:16px;border-top:1px solid #e0e2e6;padding-top:9px}
+.comparison-card dt{color:#69707b}.comparison-card dd{margin:0;font-weight:800;text-align:right}
+.comparison-saving{margin-top:16px;background:#171922;color:#fff;padding:18px;border-left:5px solid #b3131b;display:grid;gap:3px}
+.comparison-saving span{font-size:.74rem;font-weight:900;letter-spacing:.11em;color:#ffb7bb}
+.comparison-saving strong{font-size:clamp(2rem,7vw,3.3rem);line-height:1}
+.comparison-saving small{color:#d8dbe2;line-height:1.45}
+.comparison-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}.comparison-actions>*{flex:1 1 220px;text-align:center}
+@media(max-width:680px){.comparison-panel{padding:20px 16px}.comparison-grid{grid-template-columns:1fr}.comparison-card{padding:15px}.comparison-actions{display:grid}.comparison-actions>*{width:100%}}

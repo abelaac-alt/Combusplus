@@ -102,6 +102,21 @@ const el = {
   bestDistance: $('#bestDistance'),
   bestNetLiters: $('#bestNetLiters'),
   bestRefuelCost: $('#bestRefuelCost'),
+
+  comparisonDialog: $('#comparisonDialog'),
+  compareBestName: $('#compareBestName'),
+  compareBestPrice: $('#compareBestPrice'),
+  compareBestTrip: $('#compareBestTrip'),
+  compareBestTripFuel: $('#compareBestTripFuel'),
+  compareBestCost: $('#compareBestCost'),
+  compareSelectedName: $('#compareSelectedName'),
+  compareSelectedPrice: $('#compareSelectedPrice'),
+  compareSelectedTrip: $('#compareSelectedTrip'),
+  compareSelectedTripFuel: $('#compareSelectedTripFuel'),
+  compareSelectedCost: $('#compareSelectedCost'),
+  compareSaving: $('#compareSaving'),
+  compareSavingCopy: $('#compareSavingCopy'),
+  compareBestRoute: $('#compareBestRoute'),
   bestSaving: $('#bestSaving'),
   bestSavingCopy: $('#bestSavingCopy'),
   bestRoute: $('#bestRoute'),
@@ -701,6 +716,53 @@ function renderBestResult() {
   el.bestResult.hidden = false;
 }
 
+function openComparison(selectedStation) {
+  const simulation = state.currentSimulation;
+  if (!simulation?.best) {
+    toast('Realiza primero una búsqueda para calcular la mejor opción.');
+    return;
+  }
+
+  const input = { ...simulation.input, discounts: state.discounts };
+  const selected = rankStations([selectedStation], input)[0];
+  const best = simulation.best;
+  if (!selected) {
+    toast('Esta gasolinera no tiene un precio válido para la comparación actual.');
+    return;
+  }
+
+  const referenceLiters = Number(best.netLiters);
+  const bestEquivalentCost = Number(best.effectivePrice) * referenceLiters;
+  const selectedEquivalentCost = Number(selected.effectivePrice) * referenceLiters;
+  const saving = Math.max(0, selectedEquivalentCost - bestEquivalentCost);
+  const extraUsefulLiters = Math.max(0, Number(best.netLiters) - Number(selected.netLiters));
+  const tripLabel = input.tripMode === 'oneway' ? 'solo ida' : 'ida y vuelta';
+
+  el.compareBestName.textContent = best.name;
+  el.compareBestPrice.textContent = `${num(best.price)} €/l`;
+  el.compareBestTrip.textContent = `${num(best.tripKm, 1)} km · ${tripLabel}`;
+  el.compareBestTripFuel.textContent = `${num(best.tripLiters, 2)} l`;
+  el.compareBestCost.textContent = euro.format(bestEquivalentCost);
+
+  el.compareSelectedName.textContent = selected.name;
+  el.compareSelectedPrice.textContent = `${num(selected.price)} €/l`;
+  el.compareSelectedTrip.textContent = `${num(selected.tripKm, 1)} km · ${tripLabel}`;
+  el.compareSelectedTripFuel.textContent = `${num(selected.tripLiters, 2)} l`;
+  el.compareSelectedCost.textContent = euro.format(selectedEquivalentCost);
+
+  el.compareSaving.textContent = euro.format(saving);
+  if (String(best.id) === String(selected.id)) {
+    el.compareSavingCopy.textContent = 'La gasolinera seleccionada ya es la mejor opción por precio y desplazamiento.';
+  } else {
+    const modeCopy = simulation.mode === 'fullTank'
+      ? 'para obtener la misma cantidad útil tras llenar el depósito'
+      : `para obtener los mismos ${num(referenceLiters, 2)} litros útiles`;
+    el.compareSavingCopy.textContent = `Ahorras ${euro.format(saving)} ${modeCopy}. Además aprovechas ${num(extraUsefulLiters, 2)} litros útiles más con el mismo criterio de búsqueda.`;
+  }
+  el.compareBestRoute.href = mapsUrl(best);
+  openDialog(el.comparisonDialog);
+}
+
 function renderStations() {
   const items = filteredStations();
   el.stationList.replaceChildren();
@@ -741,7 +803,7 @@ function renderStations() {
     favorite.textContent = isFavorite(station.id) ? '★' : '☆';
     favorite.classList.toggle('is-favorite', isFavorite(station.id));
     favorite.addEventListener('click', () => toggleFavorite(station));
-    node.querySelector('.compare-btn').addEventListener('click', () => scrollToSearch(station));
+    node.querySelector('.compare-btn').addEventListener('click', () => openComparison(station));
     node.querySelector('.route-btn').href = mapsUrl(station);
     el.stationList.appendChild(node);
   }
@@ -1565,7 +1627,11 @@ function bind() {
     saveFavorites();
     updateDetailFavoriteButtons();
   });
-  el.detailSimulate.addEventListener('click', () => scrollToSearch(state.currentStation));
+  el.detailSimulate.addEventListener('click', () => {
+    if (!state.currentStation) return;
+    closeDialog(el.stationDialog);
+    openComparison(state.currentStation);
+  });
 
   el.filtersForm.addEventListener('submit', event => { event.preventDefault(); applyFiltersFromDialog(); });
   el.vehicleForm.addEventListener('submit', saveVehicleForm);
