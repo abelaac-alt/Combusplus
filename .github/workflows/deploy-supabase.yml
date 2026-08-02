@@ -1,0 +1,116 @@
+name: Desplegar Supabase
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/deploy-supabase.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-supabase:
+    name: Desplegar base de datos y funciones
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      PRECIOIL_API_KEY: ${{ secrets.PRECIOIL_API_KEY }}
+      COMBUSPLUS_APP_ACCESS_TOKEN: ${{ secrets.COMBUSPLUS_APP_ACCESS_TOKEN }}
+      COMBUSPLUS_SYNC_SECRET: ${{ secrets.COMBUSPLUS_SYNC_SECRET }}
+      COMBUSPLUS_SYNC_POINTS_JSON: ${{ secrets.COMBUSPLUS_SYNC_POINTS_JSON }}
+      COMBUSPLUS_ALLOWED_ORIGINS: ${{ vars.COMBUSPLUS_ALLOWED_ORIGINS }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instalar Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: latest
+          github-token: ${{ github.token }}
+
+      - name: Mostrar versión de Supabase CLI
+        run: supabase --version
+
+      - name: Comprobar configuración
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            SUPABASE_ACCESS_TOKEN PROJECT_ID SUPABASE_DB_PASSWORD
+            PRECIOIL_API_KEY COMBUSPLUS_APP_ACCESS_TOKEN
+            COMBUSPLUS_SYNC_SECRET COMBUSPLUS_SYNC_POINTS_JSON
+            COMBUSPLUS_ALLOWED_ORIGINS
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name no está configurado."
+              exit 1
+            fi
+          done
+          [[ "$SUPABASE_ACCESS_TOKEN" == sbp_* ]] || {
+            echo "::error::SUPABASE_ACCESS_TOKEN debe comenzar por sbp_."
+            exit 1
+          }
+          test -f supabase/config.toml
+          test -n "$(find supabase/migrations -maxdepth 1 -name '*.sql' -print -quit)"
+          test -f supabase/functions/stations-nearby/index.ts
+          test -f supabase/functions/station-history/index.ts
+          test -f supabase/functions/sync-stations/index.ts
+          test -f supabase/functions/health/index.ts
+          echo "Configuración comprobada."
+
+      - name: Enlazar proyecto de Supabase
+        run: |
+          supabase link \
+            --project-ref "$PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Aplicar migraciones de base de datos
+        run: |
+          supabase db push \
+            --linked \
+            --password "$SUPABASE_DB_PASSWORD" \
+            --include-all
+
+      - name: Configurar secretos de Edge Functions
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          cat > /tmp/combusplus-functions.env <<ENVFILE
+          PRECIOIL_API_KEY=$PRECIOIL_API_KEY
+          APP_ACCESS_TOKEN=$COMBUSPLUS_APP_ACCESS_TOKEN
+          SYNC_SECRET=$COMBUSPLUS_SYNC_SECRET
+          SYNC_POINTS_JSON=$COMBUSPLUS_SYNC_POINTS_JSON
+          ALLOWED_ORIGINS=$COMBUSPLUS_ALLOWED_ORIGINS
+          CACHE_MINUTES=15
+          RATE_LIMIT_PER_MINUTE=90
+          REQUIRE_APP_TOKEN=true
+          ENVFILE
+          supabase secrets set \
+            --project-ref "$PROJECT_ID" \
+            --env-file /tmp/combusplus-functions.env
+          rm -f /tmp/combusplus-functions.env
+
+      - name: Desplegar Edge Functions
+        run: |
+          supabase functions deploy stations-nearby --project-ref "$PROJECT_ID" --no-verify-jwt
+          supabase functions deploy station-history --project-ref "$PROJECT_ID" --no-verify-jwt
+          supabase functions deploy sync-stations --project-ref "$PROJECT_ID" --no-verify-jwt
+          supabase functions deploy health --project-ref "$PROJECT_ID" --no-verify-jwt
+
+      - name: Confirmar despliegue
+        run: |
+          echo "Supabase desplegado correctamente en $PROJECT_ID."
+          supabase functions list --project-ref "$PROJECT_ID"

@@ -1,0 +1,89 @@
+name: Generar APK de prueba
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Preparar configuración pública
+        env:
+          FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
+          PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$FUNCTIONS_URL" || { echo "::error::Falta SUPABASE_FUNCTIONS_URL"; exit 1; }
+          test -n "$PUBLISHABLE_KEY" || { echo "::error::Falta SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          cat > web/config.js <<EOF_CONFIG
+          window.COMBUSPLUS_CONFIG = Object.freeze({
+            version: '7.0.0',
+            supabaseFunctionsUrl: '${FUNCTIONS_URL}',
+            supabasePublishableKey: '${PUBLISHABLE_KEY}'
+          });
+          EOF_CONFIG
+
+      - name: Copiar web dentro de Android
+        run: |
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets/www
+          cp -R web/. android/app/src/main/assets/www/
+          rm -rf android/app/src/main/assets/www/tests android/app/src/main/assets/www/package.json android/app/src/main/assets/www/package-lock.json
+          test -f android/app/src/main/assets/www/index.html
+          test -f android/app/src/main/assets/www/src/app.js
+
+      - name: Compilar APK
+        working-directory: android
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Preparar APK
+        run: |
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p release
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v7-debug.apk
+          sha256sum release/Combusplus-v7-debug.apk > release/Combusplus-v7-debug.apk.sha256
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: Combusplus-APK-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            release/Combusplus-v7-debug.apk
+            release/Combusplus-v7-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
