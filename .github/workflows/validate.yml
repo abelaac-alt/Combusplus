@@ -6,17 +6,19 @@ on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - 'android/**'
-      - 'supabase/**'
-      - '.github/workflows/**'
+      - "web/**"
+      - "android/**"
+      - "supabase/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: read
 
 jobs:
-  web-tests:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v6
@@ -24,24 +26,50 @@ jobs:
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Instalar dependencias
+      - name: Probar frontend
         working-directory: web
-        run: npm ci
-
-      - name: Ejecutar pruebas
-        working-directory: web
-        run: npm test
-
-      - name: Comprobar archivos esenciales
         run: |
-          test -f web/index.html
-          test -f web/assets/styles.css
-          test -f web/src/app.js
-          test -f android/app/src/main/AndroidManifest.xml
-          test -f supabase/config.toml
-          test -d supabase/migrations
-          test -d supabase/functions
+          npm ci
+          npm test
+          node --check src/app.js
+          node --check src/core.js
+          grep -RInE 'sk_live_|service_role|SUPABASE_SERVICE_ROLE_KEY=' . && exit 1 || true
+
+      - name: Configurar Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Comprobar Edge Functions
+        run: |
+          deno check supabase/functions/bootstrap/index.ts
+          deno check supabase/functions/recommend/index.ts
+          deno check supabase/functions/compare-stations/index.ts
+          deno check supabase/functions/stations-nearby/index.ts
+          deno check supabase/functions/station-history/index.ts
+          deno check supabase/functions/sync-stations/index.ts
+          deno check supabase/functions/health/index.ts
+
+      - name: Validar XML y estructura
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path('.')
+          for path in (root/'android/app/src/main/res').rglob('*.xml'):
+              ET.parse(path)
+          ET.parse(root/'android/app/src/main/AndroidManifest.xml')
+          required = [
+              'web/index.html', 'web/privacy.html', 'web/src/app.js',
+              'android/app/src/main/AndroidManifest.xml',
+              'supabase/config.toml',
+              'supabase/migrations/202608021800_v8_anonymous_installations.sql',
+          ]
+          for name in required:
+              assert (root/name).exists(), f'Falta {name}'
+          print('XML y estructura correctos')
+          PY

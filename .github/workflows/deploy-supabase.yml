@@ -5,27 +5,32 @@ on:
   push:
     branches: [main]
     paths:
-      - 'supabase/**'
-      - '.github/workflows/deploy-supabase.yml'
+      - "supabase/**"
+      - ".github/workflows/deploy-supabase.yml"
 
 permissions:
   contents: read
 
 jobs:
   deploy-supabase:
-    name: Desplegar base de datos y funciones
+    name: Desplegar backend Combusplus 8
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
       PRECIOIL_API_KEY: ${{ secrets.PRECIOIL_API_KEY }}
-      COMBUSPLUS_APP_ACCESS_TOKEN: ${{ secrets.COMBUSPLUS_APP_ACCESS_TOKEN }}
-      COMBUSPLUS_SYNC_SECRET: ${{ secrets.COMBUSPLUS_SYNC_SECRET }}
-      COMBUSPLUS_SYNC_POINTS_JSON: ${{ secrets.COMBUSPLUS_SYNC_POINTS_JSON }}
-      COMBUSPLUS_ALLOWED_ORIGINS: ${{ vars.COMBUSPLUS_ALLOWED_ORIGINS }}
+      SYNC_SECRET: ${{ secrets.COMBUSPLUS_SYNC_SECRET }}
+      SYNC_POINTS_JSON: ${{ secrets.COMBUSPLUS_SYNC_POINTS_JSON }}
+      DEVICE_TOKEN_SECRET: ${{ secrets.COMBUSPLUS_DEVICE_TOKEN_SECRET }}
+      RATE_LIMIT_SALT: ${{ secrets.COMBUSPLUS_RATE_LIMIT_SALT }}
+      PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON }}
+      ALLOWED_ORIGINS: ${{ vars.COMBUSPLUS_ALLOWED_ORIGINS }}
+      PLAY_INTEGRITY_MODE: ${{ vars.PLAY_INTEGRITY_MODE }}
+      PLAY_INTEGRITY_PACKAGE_NAME: ${{ vars.PLAY_INTEGRITY_PACKAGE_NAME }}
+      DEVICE_TOKEN_TTL_SECONDS: ${{ vars.DEVICE_TOKEN_TTL_SECONDS }}
 
     steps:
       - name: Descargar repositorio
@@ -39,78 +44,68 @@ jobs:
           version: latest
           github-token: ${{ github.token }}
 
-      - name: Mostrar versión de Supabase CLI
-        run: supabase --version
-
       - name: Comprobar configuración
         shell: bash
         run: |
           set -euo pipefail
           required=(
             SUPABASE_ACCESS_TOKEN PROJECT_ID SUPABASE_DB_PASSWORD
-            PRECIOIL_API_KEY COMBUSPLUS_APP_ACCESS_TOKEN
-            COMBUSPLUS_SYNC_SECRET COMBUSPLUS_SYNC_POINTS_JSON
-            COMBUSPLUS_ALLOWED_ORIGINS
+            PRECIOIL_API_KEY SYNC_SECRET SYNC_POINTS_JSON
+            DEVICE_TOKEN_SECRET RATE_LIMIT_SALT ALLOWED_ORIGINS
           )
           for name in "${required[@]}"; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name no está configurado."
-              exit 1
-            fi
+            test -n "${!name:-}" || { echo "::error::$name no está configurado."; exit 1; }
           done
           [[ "$SUPABASE_ACCESS_TOKEN" == sbp_* ]] || {
             echo "::error::SUPABASE_ACCESS_TOKEN debe comenzar por sbp_."
             exit 1
           }
+          test "${#DEVICE_TOKEN_SECRET}" -ge 64 || { echo "::error::COMBUSPLUS_DEVICE_TOKEN_SECRET debe tener al menos 64 caracteres."; exit 1; }
+          test "${#RATE_LIMIT_SALT}" -ge 64 || { echo "::error::COMBUSPLUS_RATE_LIMIT_SALT debe tener al menos 64 caracteres."; exit 1; }
           test -f supabase/config.toml
-          test -n "$(find supabase/migrations -maxdepth 1 -name '*.sql' -print -quit)"
-          test -f supabase/functions/stations-nearby/index.ts
-          test -f supabase/functions/station-history/index.ts
-          test -f supabase/functions/sync-stations/index.ts
-          test -f supabase/functions/health/index.ts
-          echo "Configuración comprobada."
+          test -f supabase/functions/bootstrap/index.ts
+          test -f supabase/functions/recommend/index.ts
+          test -f supabase/functions/compare-stations/index.ts
 
       - name: Enlazar proyecto de Supabase
-        run: |
-          supabase link \
-            --project-ref "$PROJECT_ID" \
-            --password "$SUPABASE_DB_PASSWORD"
+        run: supabase link --project-ref "$PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
 
-      - name: Aplicar migraciones de base de datos
-        run: |
-          supabase db push \
-            --linked \
-            --password "$SUPABASE_DB_PASSWORD" \
-            --include-all
+      - name: Aplicar migraciones
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all
 
       - name: Configurar secretos de Edge Functions
         shell: bash
         run: |
           set -euo pipefail
-          umask 077
-          cat > /tmp/combusplus-functions.env <<ENVFILE
-          PRECIOIL_API_KEY=$PRECIOIL_API_KEY
-          APP_ACCESS_TOKEN=$COMBUSPLUS_APP_ACCESS_TOKEN
-          SYNC_SECRET=$COMBUSPLUS_SYNC_SECRET
-          SYNC_POINTS_JSON=$COMBUSPLUS_SYNC_POINTS_JSON
-          ALLOWED_ORIGINS=$COMBUSPLUS_ALLOWED_ORIGINS
-          CACHE_MINUTES=15
-          RATE_LIMIT_PER_MINUTE=90
-          REQUIRE_APP_TOKEN=true
-          ENVFILE
-          supabase secrets set \
-            --project-ref "$PROJECT_ID" \
-            --env-file /tmp/combusplus-functions.env
-          rm -f /tmp/combusplus-functions.env
+          supabase secrets set --project-ref "$PROJECT_ID" \
+            "PRECIOIL_API_KEY=$PRECIOIL_API_KEY" \
+            "SYNC_SECRET=$SYNC_SECRET" \
+            "SYNC_POINTS_JSON=$SYNC_POINTS_JSON" \
+            "DEVICE_TOKEN_SECRET=$DEVICE_TOKEN_SECRET" \
+            "RATE_LIMIT_SALT=$RATE_LIMIT_SALT" \
+            "ALLOWED_ORIGINS=$ALLOWED_ORIGINS" \
+            "PLAY_INTEGRITY_MODE=${PLAY_INTEGRITY_MODE:-optional}" \
+            "PLAY_INTEGRITY_PACKAGE_NAME=${PLAY_INTEGRITY_PACKAGE_NAME:-com.grupomds.combusplus}" \
+            "DEVICE_TOKEN_TTL_SECONDS=${DEVICE_TOKEN_TTL_SECONDS:-604800}" \
+            "DEVICE_TOKEN_VERSION=1" \
+            "CACHE_MINUTES=15" \
+            "RATE_LIMIT_PER_MINUTE=90" \
+            "EXPOSE_FUNCTION_ERRORS=false"
+
+          if [ -n "${PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON:-}" ]; then
+            supabase secrets set --project-ref "$PROJECT_ID" \
+              "PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON=$PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON"
+          else
+            echo "Play Integrity queda en modo opcional hasta configurar la cuenta de servicio."
+          fi
 
       - name: Desplegar Edge Functions
+        shell: bash
         run: |
-          supabase functions deploy stations-nearby --project-ref "$PROJECT_ID" --no-verify-jwt
-          supabase functions deploy station-history --project-ref "$PROJECT_ID" --no-verify-jwt
-          supabase functions deploy sync-stations --project-ref "$PROJECT_ID" --no-verify-jwt
-          supabase functions deploy health --project-ref "$PROJECT_ID" --no-verify-jwt
+          set -euo pipefail
+          for fn in bootstrap recommend compare-stations stations-nearby station-history sync-stations health; do
+            supabase functions deploy "$fn" --project-ref "$PROJECT_ID" --no-verify-jwt
+          done
 
       - name: Confirmar despliegue
-        run: |
-          echo "Supabase desplegado correctamente en $PROJECT_ID."
-          supabase functions list --project-ref "$PROJECT_ID"
+        run: supabase functions list --project-ref "$PROJECT_ID"
