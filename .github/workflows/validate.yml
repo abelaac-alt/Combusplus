@@ -1,0 +1,47 @@
+name: Validar proyecto
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'android/**'
+      - 'supabase/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+
+      - name: Configurar Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: web
+        run: npm ci
+
+      - name: Ejecutar pruebas
+        working-directory: web
+        run: npm test
+
+      - name: Comprobar archivos esenciales
+        run: |
+          test -f web/index.html
+          test -f web/assets/styles.css
+          test -f web/src/app.js
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f supabase/config.toml
+          test -d supabase/migrations
+          test -d supabase/functions
