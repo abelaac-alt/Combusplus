@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">Combusplus</string>
-    <string name="notification_channel_name">Cambios de precio</string>
-    <string name="notification_channel_description">Avisos cuando cambia el combustible de una gasolinera favorita</string>
-</resources>
