@@ -146,8 +146,8 @@ revoke all on public.user_preferences from anon, authenticated;
 revoke all on public.push_subscriptions from anon, authenticated;
 
 create or replace function public.combusplus_cleanup_operational_data(
-  p_history_days integer default 730,
-  p_sync_days integer default 90
+  p_history_retention_days integer default 730,
+  p_sync_retention_days integer default 90
 ) returns jsonb
 language plpgsql
 security definer
@@ -161,11 +161,11 @@ declare
   installations_deleted bigint := 0;
 begin
   delete from private.station_price_history
-  where observed_at < now() - make_interval(days => greatest(30, p_history_days));
+  where observed_at < now() - make_interval(days => greatest(30, p_history_retention_days));
   get diagnostics history_deleted = row_count;
 
   delete from private.sync_runs
-  where started_at < now() - make_interval(days => greatest(7, p_sync_days));
+  where started_at < now() - make_interval(days => greatest(7, p_sync_retention_days));
   get diagnostics sync_deleted = row_count;
 
   delete from private.api_rate_limits where expires_at < now();
