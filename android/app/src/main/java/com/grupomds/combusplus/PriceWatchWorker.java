@@ -36,7 +36,7 @@ public class PriceWatchWorker extends Worker {
 
         try {
             JSONObject config = new JSONObject(rawConfig);
-            if (!config.optBoolean("enabled", false)) return Result.success();
+            boolean notificationsEnabled = config.optBoolean("enabled", false);
             JSONArray favorites = config.optJSONArray("favorites");
             if (favorites == null || favorites.length() == 0) return Result.success();
 
@@ -47,43 +47,36 @@ public class PriceWatchWorker extends Worker {
             for (int i = 0; i < favorites.length(); i++) {
                 JSONObject favorite = favorites.optJSONObject(i);
                 if (favorite == null) continue;
+                boolean notifyThisFavorite = notificationsEnabled && favorite.optBoolean("notifications", true);
                 try {
-                    checkFavorite(config, favorite, threshold, direction, prefs);
+                    checkFavorite(config, favorite, threshold, direction, prefs, notifyThisFavorite);
                 } catch (Exception exception) {
                     hadTemporaryFailure = true;
                 }
             }
+            AppWidgetUpdater.updateAll(getApplicationContext());
             return hadTemporaryFailure ? Result.retry() : Result.success();
         } catch (Exception exception) {
             return Result.failure();
         }
     }
 
-    private void checkFavorite(JSONObject config, JSONObject favorite, double threshold, String direction, SharedPreferences prefs) throws Exception {
+    private void checkFavorite(JSONObject config, JSONObject favorite, double threshold, String direction, SharedPreferences prefs, boolean notify) throws Exception {
         double latitude = favorite.optDouble("latitude", Double.NaN);
         double longitude = favorite.optDouble("longitude", Double.NaN);
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
 
+        String functionsUrl = config.optString("supabaseFunctionsUrl", "").replaceAll("/+$", "");
+        String publishableKey = config.optString("supabasePublishableKey", "");
+        String accessToken = config.optString("appAccessToken", "");
+        if (functionsUrl.trim().isEmpty() || publishableKey.trim().isEmpty() || accessToken.trim().isEmpty()) return;
+
         String query = "latitud=" + encode(String.format(Locale.US, "%.6f", latitude)) +
                 "&longitud=" + encode(String.format(Locale.US, "%.6f", longitude)) +
                 "&radio=1&pagina=1&limite=50&fields=current";
-        String apiMode = config.optString("apiMode", "proxy");
-        String endpoint;
-        String apiKey = null;
-        String clientToken = null;
+        String endpoint = functionsUrl + "/stations-nearby?" + query;
 
-        if ("direct".equals(apiMode)) {
-            apiKey = config.optString("precioilKey", "");
-            if (apiKey.trim().isEmpty()) return;
-            endpoint = "https://api.precioil.es/estaciones/radio?" + query;
-        } else {
-            String proxyUrl = config.optString("proxyUrl", "").replaceAll("/+$", "");
-            if (proxyUrl.trim().isEmpty()) return;
-            clientToken = config.optString("proxyToken", "");
-            endpoint = proxyUrl + "/estaciones/radio?" + query;
-        }
-
-        JSONObject response = getJson(endpoint, apiKey, clientToken);
+        JSONObject response = getJson(endpoint, publishableKey, accessToken);
         JSONArray stations = findStationArray(response);
         if (stations == null) return;
 
@@ -96,12 +89,18 @@ public class PriceWatchWorker extends Worker {
         Double price = extractPrice(station, fuelKey);
         if (price == null) return;
 
-        String prefKey = "last_price_" + safeKey(favoriteId) + "_" + safeKey(fuelKey);
-        double previous = prefs.contains(prefKey) ? Double.longBitsToDouble(prefs.getLong(prefKey, 0L)) : favorite.optDouble("lastPrice", Double.NaN);
-        prefs.edit().putLong(prefKey, Double.doubleToRawLongBits(price)).apply();
-        if (!Double.isFinite(previous)) return;
+        String prefKey = pricePreferenceKey(favoriteId, fuelKey);
+        String changeKey = changePreferenceKey(favoriteId, fuelKey);
+        double previous = prefs.contains(prefKey)
+                ? Double.longBitsToDouble(prefs.getLong(prefKey, 0L))
+                : favorite.optDouble("lastPrice", Double.NaN);
+        double change = Double.isFinite(previous) ? price - previous : 0d;
+        prefs.edit()
+                .putLong(prefKey, Double.doubleToRawLongBits(price))
+                .putLong(changeKey, Double.doubleToRawLongBits(change))
+                .apply();
+        if (!Double.isFinite(previous) || !notify) return;
 
-        double change = price - previous;
         if (Math.abs(change) + 0.0000001 < threshold) return;
         if ("down".equals(direction) && change >= 0) return;
         if ("up".equals(direction) && change <= 0) return;
@@ -115,15 +114,16 @@ public class PriceWatchWorker extends Worker {
         NotificationHelper.show(getApplicationContext(), notificationId, title, body);
     }
 
-    private JSONObject getJson(String endpoint, String apiKey, String clientToken) throws Exception {
+    private JSONObject getJson(String endpoint, String publishableKey, String accessToken) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(12000);
         connection.setReadTimeout(12000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroid/5.3");
-        if (apiKey != null && !apiKey.trim().isEmpty()) connection.setRequestProperty("X-API-Key", apiKey);
-        if (clientToken != null && !clientToken.trim().isEmpty()) connection.setRequestProperty("X-Combusplus-Client", clientToken);
+        connection.setRequestProperty("User-Agent", "CombusplusAndroid/6.0");
+        connection.setRequestProperty("apikey", publishableKey);
+        connection.setRequestProperty("Authorization", "Bearer " + publishableKey);
+        connection.setRequestProperty("X-Combusplus-Token", accessToken);
         int status = connection.getResponseCode();
         if (status < 200 || status >= 300) throw new IllegalStateException("HTTP " + status);
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
@@ -134,6 +134,14 @@ public class PriceWatchWorker extends Worker {
         } finally {
             connection.disconnect();
         }
+    }
+
+    static String pricePreferenceKey(String stationId, String fuelKey) {
+        return "last_price_" + safeKey(stationId) + "_" + safeKey(fuelKey);
+    }
+
+    static String changePreferenceKey(String stationId, String fuelKey) {
+        return "last_change_" + safeKey(stationId) + "_" + safeKey(fuelKey);
     }
 
     private JSONArray findStationArray(Object value) {
@@ -239,7 +247,7 @@ public class PriceWatchWorker extends Worker {
         try { return URLEncoder.encode(value, "UTF-8"); } catch (Exception ignored) { return value; }
     }
 
-    private String safeKey(String value) {
+    private static String safeKey(String value) {
         return value == null ? "unknown" : value.replaceAll("[^a-zA-Z0-9_-]", "_");
     }
 

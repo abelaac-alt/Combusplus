@@ -16,8 +16,8 @@ android {
         applicationId = "com.grupomds.combusplus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "5.3.0"
+        versionCode = 10
+        versionName = "6.0.0"
         buildConfigField("String", "WEB_APP_URL", "\"${webAppUrl.get()}\"")
     }
 
@@ -53,6 +53,7 @@ android {
 dependencies {
     implementation("androidx.core:core:1.16.0")
     implementation("androidx.work:work-runtime:2.11.2")
+    implementation("androidx.webkit:webkit:1.16.0")
 }
 
 val syncWebAssets by tasks.registering(Copy::class) {

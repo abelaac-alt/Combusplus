@@ -1,52 +1,38 @@
-# Combusplus 5.3
+# Combusplus 6.0
 
-Aplicación web y Android para encontrar la gasolinera que más conviene según el vehículo, el importe del repostaje, la distancia y el precio del combustible.
+Aplicación web, PWA y Android para encontrar la gasolinera que más conviene según el vehículo, el importe del repostaje, la distancia, el consumo del trayecto y el precio real del combustible.
 
-## Novedades de la versión 5.3
+## Qué incluye
 
-- La búsqueda de la gasolinera más barata es ahora la pantalla principal.
-- Flujo simplificado: vehículo, importe, radio y búsqueda.
-- El cálculo compara precio personal, consumo del trayecto y litros útiles obtenidos.
-- Recomendación destacada con ruta, detalles, favorita y registro como REPOSTADO.
-- Web y APK utilizan exactamente la misma interfaz desde la carpeta `web`.
-- Corrección del desplazamiento horizontal en pantallas móviles.
-- Cabecera, navegación y ventanas adaptadas a las zonas seguras del dispositivo.
-- Ajustes y fichas con desplazamiento vertical interno para que no se corten.
-- WebView Android protegido frente a barras de estado, cámara frontal y barra de navegación.
-
-## Funciones
-
-- Buscador de la mejor gasolinera según:
-  - vehículo y consumo;
-  - tipo de combustible;
-  - importe a repostar;
-  - distancia;
-  - trayecto de ida o ida y vuelta;
-  - descuentos guardados.
-- Comparativa de gasolineras por coste real, precio, distancia o nombre.
-- Google Maps integrado.
-- Gasolineras favoritas y avisos de cambios de precio.
-- Historial de repostajes y ahorro acumulado.
-- Gestión de vehículos y descuentos.
-- PWA para GitHub Pages.
-- APK Android con la web incluida dentro de la aplicación.
-- Proxy opcional de Cloudflare Worker para proteger la clave de Precioil.
+- Una única interfaz en `web/` compartida por GitHub Pages y la APK.
+- Buscador principal de la gasolinera más rentable para un importe concreto.
+- Cálculo rápido para llenar el depósito completo y abrir la ruta automáticamente.
+- Vehículos con combustible, consumo y capacidad de depósito.
+- Favoritas con precio actual, subida o bajada y notificaciones Android.
+- Dos widgets Android para la pantalla de inicio:
+  - precios de favoritas;
+  - búsqueda directa del mejor llenado completo.
+- Historial local de repostajes, ahorro, vehículos, descuentos y preferencias.
+- Persistencia doble en Android: almacenamiento web y `SharedPreferences` privados.
+- Backend Supabase con Edge Functions, caché de estaciones e histórico de precios.
+- Clave privada de Precioil y `service_role` exclusivamente en secretos del servidor.
+- Publicación web, generación de APK y despliegue de Supabase mediante GitHub Actions.
 
 ## Estructura
 
 ```text
-web/                         Aplicación web y PWA
-android/                     Proyecto Android
-backend/cloudflare-worker/   Proxy seguro opcional
-.github/workflows/           Publicación web y generación de APK
+web/                         Interfaz web/PWA compartida con Android
+android/                     Contenedor Android, notificaciones y widgets
+supabase/                    Base de datos, Edge Functions y programación
+.github/workflows/           Web, APK, Release y backend
 ```
 
 ## Publicar la web
 
-1. Sube todo el proyecto al repositorio.
-2. Abre **Settings → Pages**.
-3. Selecciona **GitHub Actions** como fuente.
-4. Ejecuta **Publicar web**.
+1. Sube todo el contenido del proyecto a la raíz del repositorio.
+2. En **Settings → Pages**, selecciona **GitHub Actions**.
+3. Configura las variables del repositorio descritas en `SUPABASE_SETUP.md`.
+4. Ejecuta **Actions → Publicar web**.
 
 Dirección prevista:
 
@@ -56,36 +42,42 @@ https://abelaac-alt.github.io/Combusplus/
 
 ## Generar la APK
 
-1. Abre **Actions**.
-2. Selecciona **Generar APK de prueba**.
-3. Pulsa **Run workflow**.
-4. Descarga el artefacto **Combusplus-APK**.
+1. Abre **Actions → Generar APK de prueba**.
+2. Pulsa **Run workflow**.
+3. Descarga el artefacto **Combusplus-APK**.
+4. Descomprime e instala `Combusplus-v6-debug.apk`.
 
-El archivo generado es:
+La Action copia `web/` dentro de `android/app/src/main/assets/www/`. La APK y la web utilizan por tanto el mismo HTML, CSS, JavaScript, logo y funcionalidades.
 
-```text
-Combusplus-debug.apk
-```
+## Servidor Supabase
 
-La Action copia automáticamente el contenido completo de `web/` a:
+Consulta [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md). El proyecto incluye:
 
-```text
-android/app/src/main/assets/www/
-```
+- tablas privadas de estaciones, precios actuales e histórico;
+- RLS y revocación de acceso público;
+- RPC accesibles únicamente mediante `service_role`;
+- Edge Function `stations-nearby` para la aplicación;
+- Edge Function `sync-stations` para actualización programada;
+- limitación de solicitudes;
+- lista de orígenes permitidos;
+- cron opcional cada 15 minutos.
 
-Por este motivo, la interfaz de la APK y la web siempre es la misma.
+## Almacenamiento local
 
-## Instalación limpia
+Los siguientes datos no se suben a Supabase:
 
-Al probar esta actualización:
+- vehículos;
+- matrícula o referencia;
+- descuentos;
+- favoritas;
+- preferencias;
+- historial de repostajes;
+- configuración personal.
 
-1. Desinstala la APK anterior.
-2. Instala la APK 5.3 recién generada.
-3. Vuelve a introducir las claves desde Ajustes si Android eliminó los datos anteriores.
+En la web se guardan en `localStorage`. En Android se replican además en las preferencias privadas de la aplicación para evitar pérdidas por limpieza del WebView.
 
-## Seguridad
+## Versión
 
-- No se incluyen claves API dentro del repositorio.
-- La clave directa se guarda en el dispositivo.
-- Para una publicación comercial se recomienda el proxy incluido.
-- Restringe la clave de Google Maps al dominio y a Maps JavaScript API.
+- Web: `6.0.0`
+- Android: `versionName 6.0.0`
+- Android: `versionCode 10`
