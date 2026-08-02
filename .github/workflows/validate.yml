@@ -66,10 +66,21 @@ jobs:
           required = [
               'web/index.html', 'web/privacy.html', 'web/src/app.js',
               'android/app/src/main/AndroidManifest.xml',
+              'android/app/src/main/java/com/grupomds/combusplus/NativeSessionManager.java',
               'supabase/config.toml',
               'supabase/migrations/202608021800_v8_anonymous_installations.sql',
           ]
           for name in required:
               assert (root/name).exists(), f'Falta {name}'
-          print('XML y estructura correctos')
+
+          package = (root/'web/package.json').read_text(encoding='utf-8')
+          gradle = (root/'android/app/build.gradle.kts').read_text(encoding='utf-8')
+          health = (root/'supabase/functions/health/index.ts').read_text(encoding='utf-8')
+          for content, source in [(package, 'web'), (gradle, 'android'), (health, 'backend')]:
+              assert '9.0.0' in content, f'Versión incoherente en {source}'
+
+          migration = (root/'supabase/migrations/202608021800_v8_anonymous_installations.sql').read_text(encoding='utf-8')
+          assert 'p_history_retention_days' in migration
+          assert 'p_sync_retention_days' in migration
+          print('XML, estructura, migración y versiones correctos')
           PY

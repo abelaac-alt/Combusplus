@@ -50,9 +50,10 @@ jobs:
         run: |
           test -n "$FUNCTIONS_URL" || { echo "::error::Falta SUPABASE_FUNCTIONS_URL"; exit 1; }
           test -n "$PUBLISHABLE_KEY" || { echo "::error::Falta SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          test -n "$GOOGLE_MAPS_KEY" || { echo "::error::Falta GOOGLE_MAPS_API_KEY"; exit 1; }
           cat > web/config.js <<EOF_CONFIG
           window.COMBUSPLUS_CONFIG = Object.freeze({
-            version: '8.0.0',
+            version: '9.0.0',
             supabaseFunctionsUrl: '${FUNCTIONS_URL}',
             supabasePublishableKey: '${PUBLISHABLE_KEY}',
             googleMapsKey: '${GOOGLE_MAPS_KEY}',
@@ -76,8 +77,8 @@ jobs:
         run: |
           test -f android/app/build/outputs/apk/debug/app-debug.apk
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v8.0-debug.apk
-          sha256sum release/Combusplus-v8.0-debug.apk > release/Combusplus-v8.0-debug.apk.sha256
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v9.0-debug.apk
+          sha256sum release/Combusplus-v9.0-debug.apk > release/Combusplus-v9.0-debug.apk.sha256
 
       - name: Subir APK
         uses: actions/upload-artifact@v7

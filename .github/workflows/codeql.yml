@@ -1,0 +1,71 @@
+name: Análisis de seguridad CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analizar ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["java-kotlin", "javascript-typescript"]
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+
+      - name: Configurar Java 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Configurar Android SDK
+        if: matrix.language == 'java-kotlin'
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar Android SDK
+        if: matrix.language == 'java-kotlin'
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Configurar Gradle
+        if: matrix.language == 'java-kotlin'
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.4.1"
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Compilar Android para CodeQL
+        if: matrix.language == 'java-kotlin'
+        working-directory: android
+        run: |
+          gradle :app:assembleDebug --stacktrace --no-daemon \
+            -PCOMBUSPLUS_FUNCTIONS_URL="" \
+            -PCOMBUSPLUS_PUBLISHABLE_KEY="" \
+            -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="0"
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

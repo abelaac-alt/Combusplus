@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   deploy-supabase:
-    name: Desplegar backend Combusplus 8
+    name: Desplegar backend Combusplus 9
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
