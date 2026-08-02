@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111214">
+  <meta name="description" content="Combusplus encuentra la gasolinera que más te conviene según tu vehículo, el importe del repostaje, la distancia y el precio del combustible.">
+  <title>Combusplus</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="brand" href="#list" data-nav="list" aria-label="Combusplus, buscar gasolinera">
+        <img src="./assets/logo.png" alt="Logo de Combusplus" width="44" height="44">
+        <span><strong>Combusplus</strong><small>La gasolinera más barata para tu coche</small></span>
+      </a>
+      <button class="header-settings" id="openSettings" type="button" aria-label="Abrir ajustes">
+        <span aria-hidden="true">⚙</span><small>Ajustes</small>
+      </button>
+    </header>
+
+    <main>
+      <section class="page is-active" data-page="list">
+        <section class="search-hero" aria-labelledby="searchTitle">
+          <span class="eyebrow light">BUSCADOR INTELIGENTE</span>
+          <h1 id="searchTitle">¿Dónde te sale más barato repostar?</h1>
+          <p>Comparamos el precio, la distancia y el combustible que gastarás en el desplazamiento.</p>
+        </section>
+
+        <form id="quickSearchForm" class="search-card" novalidate>
+          <div class="search-step">
+            <span class="step-number">1</span>
+            <div class="step-copy"><strong>Selecciona tu vehículo</strong><small>Usaremos su consumo y combustible guardados.</small></div>
+          </div>
+          <label class="field main-field">
+            <span>Vehículo</span>
+            <select id="quickVehicle"><option value="">Datos manuales</option></select>
+          </label>
+
+          <div id="manualVehicleFields" class="manual-fields">
+            <label class="field"><span>Consumo medio</span><div class="input-unit"><input id="quickConsumption" type="number" min="1" max="30" step="0.1" value="6.5" inputmode="decimal"><em>l/100 km</em></div></label>
+            <label class="field"><span>Combustible</span><select id="quickFuel"></select></label>
+          </div>
+
+          <div class="search-step second-step">
+            <span class="step-number">2</span>
+            <div class="step-copy"><strong>Indica cuánto vas a repostar</strong><small>Cuanto mayor sea el importe, más puede compensar desplazarse.</small></div>
+          </div>
+          <div class="search-grid">
+            <label class="field"><span>Importe</span><div class="input-unit"><input id="quickAmount" type="number" min="5" max="500" step="1" value="50" inputmode="decimal"><em>€</em></div></label>
+            <label class="field"><span>Radio máximo</span><div class="input-unit"><input id="quickRadius" type="number" min="1" max="50" step="1" value="15" inputmode="numeric"><em>km</em></div></label>
+          </div>
+
+          <details class="advanced-search">
+            <summary>Opciones avanzadas</summary>
+            <div class="segment compact-segment">
+              <label><input type="radio" name="quickTrip" value="roundtrip" checked><span>Ida y vuelta</span></label>
+              <label><input type="radio" name="quickTrip" value="oneway"><span>Solo ida</span></label>
+            </div>
+          </details>
+
+          <p id="quickSearchError" class="form-error" hidden></p>
+          <button class="primary-btn search-submit" id="quickSearchButton" type="submit">
+            <span>Encontrar la gasolinera más barata</span><b aria-hidden="true">→</b>
+          </button>
+          <div class="search-status"><span id="locationStatus">Ubicación pendiente</span><button class="link-btn" id="refreshLocation" type="button">Actualizar ubicación</button></div>
+        </form>
+
+        <section class="home-widget-grid" aria-label="Accesos rápidos">
+          <article class="home-widget favorite-summary-widget">
+            <div class="home-widget-head">
+              <div><span class="eyebrow">FAVORITAS</span><h2>Precios guardados</h2></div>
+              <button class="icon-text-btn" id="refreshFavoriteWidget" type="button" aria-label="Actualizar precios favoritos">Actualizar</button>
+            </div>
+            <div id="favoriteWidgetList" class="favorite-widget-list">
+              <p class="widget-empty">Guarda gasolineras como favoritas para ver aquí sus precios y cambios.</p>
+            </div>
+            <button class="widget-link" type="button" data-nav="favorites">Ver todas las favoritas</button>
+          </article>
+
+          <article class="home-widget full-tank-widget">
+            <div class="full-tank-copy">
+              <span class="eyebrow light">UN TOQUE</span>
+              <h2>Llenar el depósito al mejor precio</h2>
+              <p id="fullTankHint">Selecciona un vehículo con capacidad de depósito y encontraremos la opción más rentable.</p>
+            </div>
+            <button class="full-tank-action" id="fullTankButton" type="button">
+              <span>Buscar y abrir la ruta</span><b aria-hidden="true">→</b>
+            </button>
+          </article>
+        </section>
+
+        <section id="bestResult" class="best-result" hidden aria-live="polite">
+          <div class="best-result-label"><span>MEJOR OPCIÓN PARA TU REPOSTAJE</span><button id="bestFavorite" class="result-favorite" type="button" aria-label="Guardar gasolinera favorita">☆</button></div>
+          <h2 id="bestName">Gasolinera recomendada</h2>
+          <p id="bestAddress"></p>
+          <div class="best-metrics">
+            <div><span>Precio personal</span><strong id="bestPrice">—</strong></div>
+            <div><span>Distancia estimada</span><strong id="bestDistance">—</strong></div>
+            <div><span>Litros útiles</span><strong id="bestNetLiters">—</strong></div>
+          </div>
+          <div class="saving-strip"><span>AHORRO ESTIMADO</span><strong id="bestSaving">—</strong><small id="bestSavingCopy">frente a la opción más cercana</small></div>
+          <div class="best-actions">
+            <a id="bestRoute" class="secondary-btn" target="_blank" rel="noopener noreferrer">Abrir ruta</a>
+            <button id="bestDetails" class="secondary-btn" type="button">Ver detalles</button>
+            <button id="markRefueled" class="success-btn" type="button">Marcar como REPOSTADO</button>
+          </div>
+        </section>
+
+        <section class="alternatives-section">
+          <div class="section-title alternatives-title">
+            <div><span class="eyebrow">OTRAS OPCIONES</span><h2>Comparativa</h2></div>
+            <button class="text-btn" id="openFilters" type="button">Filtros</button>
+          </div>
+          <section class="toolbar-card compact-toolbar">
+            <label class="compact-field"><span>Ordenar</span><select id="listSort"><option value="effective">Mejor para mi repostaje</option><option value="price">Precio por litro</option><option value="distance">Distancia</option><option value="name">Nombre</option></select></label>
+            <label class="compact-field"><span>Combustible</span><select id="listFuel"></select></label>
+            <label class="compact-field"><span>Radio</span><select id="listRadius"><option value="3">3 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15" selected>15 km</option><option value="25">25 km</option><option value="50">50 km</option></select></label>
+            <button class="secondary-btn compact" id="searchStations" type="button">Actualizar</button>
+          </section>
+          <div class="status-row"><span id="listSummary">Pulsa el botón principal para comenzar</span></div>
+          <section id="stationList" class="station-list" aria-live="polite"></section>
+        </section>
+      </section>
+
+      <section class="page" data-page="map">
+        <div class="page-head">
+          <div><span class="eyebrow">VISTA GEOGRÁFICA</span><h1>Mapa</h1></div>
+          <button class="text-btn" id="refreshMap" type="button">Actualizar</button>
+        </div>
+        <section class="map-toolbar"><span id="mapModeLabel">Todas las gasolineras</span><button class="switch-btn" id="mapTopTenToggle" type="button" aria-pressed="false">Top 10</button></section>
+        <div id="googleMap" class="map-canvas"><div class="empty-state"><strong>Mapa pendiente</strong><p>Configura Google Maps y realiza una búsqueda.</p><button class="secondary-btn" id="configureMap" type="button">Configurar mapa</button></div></div>
+        <section id="mapPreviewList" class="map-preview-list"></section>
+      </section>
+
+      <section class="page" data-page="favorites">
+        <div class="page-head"><div><span class="eyebrow">SEGUIMIENTO DE PRECIOS</span><h1>Favoritos</h1></div><span class="count-badge" id="favoriteCount">0</span></div>
+        <section class="notice-card"><div><strong>Avisos de precio</strong><p>Te avisaremos cuando cambie el combustible seleccionado.</p></div><button class="switch-btn" id="globalNotificationsToggle" type="button" aria-pressed="false">Desactivados</button></section>
+        <section id="favoriteList" class="favorite-list"></section>
+      </section>
+
+      <section class="page" data-page="stats">
+        <div class="page-head"><div><span class="eyebrow">TU PERFIL</span><h1>Actividad</h1></div><button class="text-btn" id="exportData" type="button">Exportar</button></div>
+        <section class="metric-grid">
+          <article><span>Ahorro total</span><strong id="statSaving">0,00 €</strong></article>
+          <article><span>Repostajes</span><strong id="statRefuels">0</strong></article>
+          <article><span>Importe total</span><strong id="statAmount">0,00 €</strong></article>
+          <article><span>Litros registrados</span><strong id="statLiters">0,00 l</strong></article>
+        </section>
+        <section class="section-card"><div class="section-title"><div><span class="eyebrow">VEHÍCULOS</span><h2>Mis coches</h2></div><button class="text-btn" id="newVehicle" type="button">Añadir</button></div><div id="vehicleList" class="vehicle-list"></div></section>
+        <section class="section-card"><div class="section-title"><div><span class="eyebrow">HISTORIAL</span><h2>Repostajes</h2></div><button class="text-btn danger" id="clearHistory" type="button">Borrar</button></div><div id="refuelHistory" class="history-list"></div></section>
+        <section class="section-card"><div class="section-title"><div><span class="eyebrow">PRECIO PERSONAL</span><h2>Descuentos</h2></div><button class="text-btn" id="newDiscount" type="button">Añadir</button></div><p class="section-copy">Añade descuentos de tarjetas, marcas o estaciones. Se aplicarán automáticamente.</p><div id="discountList" class="discount-list"></div></section>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navegación principal">
+      <button class="nav-item is-active" type="button" data-nav="list"><span>⌕</span><small>Buscar</small></button>
+      <button class="nav-item" type="button" data-nav="map"><span>⌖</span><small>Mapa</small></button>
+      <button class="nav-item" type="button" data-nav="favorites"><span>☆</span><small>Favoritos</small><b id="favoriteNavBadge" hidden>0</b></button>
+      <button class="nav-item" type="button" data-nav="stats"><span>▥</span><small>Perfil</small></button>
+    </nav>
+  </div>
+
+  <dialog id="stationDialog" class="dialog station-dialog">
+    <article class="station-detail">
+      <button class="dialog-close" data-close-dialog="stationDialog" type="button" aria-label="Cerrar">×</button>
+      <div class="detail-heading"><span id="detailBrand">GASOLINERA</span><h2 id="detailName">Estación</h2><p id="detailAddress"></p></div>
+      <div class="detail-table" id="detailFuelTable"></div>
+      <div class="detail-meta"><span id="detailOpen">Estado desconocido</span><span id="detailHours">Horario no disponible</span><span id="detailDistance">— km</span></div>
+      <div class="price-scale-wrap"><div class="price-scale-copy"><strong id="detailSelectedPrice">—</strong><span id="detailAverageText">precio medio</span></div><div class="price-scale"><i id="detailScaleMarker"></i></div><div class="price-scale-labels"><span id="detailScaleMin">—</span><strong>Precio por litro</strong><span id="detailScaleMax">—</span></div></div>
+      <div class="chart-block"><div class="chart-title"><strong>Evolución registrada</strong><span id="detailTrend">Sin datos previos</span></div><svg id="priceHistoryChart" viewBox="0 0 560 160" role="img" aria-label="Historial de precio"></svg></div>
+      <div class="detail-actions"><button id="detailAlert" type="button"><span>♧</span><small>Avisos</small></button><button id="detailFavorite" type="button"><span>☆</span><small>Favorita</small></button><a id="detailRoute" target="_blank" rel="noopener noreferrer"><span>➜</span><small>Ruta</small></a><button id="detailSimulate" type="button"><span>⌕</span><small>Comparar</small></button></div>
+    </article>
+  </dialog>
+
+  <dialog id="filtersDialog" class="dialog form-dialog">
+    <form method="dialog" class="dialog-panel" id="filtersForm">
+      <div class="dialog-title"><div><span class="eyebrow">VISTA Y FILTROS</span><h2>Resultados</h2></div><button class="dialog-close inline" value="cancel" aria-label="Cerrar">×</button></div>
+      <fieldset><legend>Estado de la estación</legend><p>Decide si quieres ocultar las estaciones cerradas.</p><div class="option-list"><label><input type="radio" name="openFilter" value="open"><span>Solo abiertas</span></label><label><input type="radio" name="openFilter" value="all" checked><span>Mostrar todas</span></label></div></fieldset>
+      <fieldset><legend>Mapa</legend><p>Limita el mapa a las diez estaciones con mejor precio.</p><div class="option-list"><label><input type="radio" name="mapMode" value="all" checked><span>Todas en el radio</span></label><label><input type="radio" name="mapMode" value="top10"><span>Solo las 10 más baratas</span></label></div></fieldset>
+      <fieldset><legend>Mostrar precios</legend><div class="segment"><label><input type="radio" name="priceDisplay" value="liter" checked><span>Por litro</span></label><label><input type="radio" name="priceDisplay" value="tank"><span>Depósito completo</span></label></div></fieldset>
+      <button class="primary-btn" id="applyFilters" value="default">Aplicar filtros</button>
+    </form>
+  </dialog>
+
+  <dialog id="vehicleDialog" class="dialog form-dialog">
+    <form class="dialog-panel" id="vehicleForm">
+      <div class="dialog-title"><div><span class="eyebrow">VEHÍCULO</span><h2 id="vehicleDialogTitle">Añadir vehículo</h2></div><button class="dialog-close inline" data-close-dialog="vehicleDialog" type="button">×</button></div>
+      <input id="vehicleId" type="hidden">
+      <label class="field"><span>Nombre</span><input id="vehicleName" maxlength="60" placeholder="Ej. Seat León 1.6 TDI" required></label>
+      <div class="field-grid"><label class="field"><span>Matrícula o referencia</span><input id="vehiclePlate" maxlength="20" placeholder="Opcional"></label><label class="field"><span>Capacidad del depósito</span><div class="input-unit"><input id="vehicleTank" type="number" min="10" max="200" step="1" value="50"><em>litros</em></div></label><label class="field"><span>Consumo medio</span><div class="input-unit"><input id="vehicleConsumption" type="number" min="1" max="30" step="0.1" value="6"><em>l/100 km</em></div></label><label class="field"><span>Combustible</span><select id="vehicleFuel"></select></label></div>
+      <p id="vehicleError" class="form-error" hidden></p><button class="primary-btn" type="submit">Guardar vehículo</button>
+    </form>
+  </dialog>
+
+  <dialog id="discountDialog" class="dialog form-dialog">
+    <form class="dialog-panel" id="discountForm">
+      <div class="dialog-title"><div><span class="eyebrow">DESCUENTO</span><h2 id="discountDialogTitle">Añadir descuento</h2></div><button class="dialog-close inline" data-close-dialog="discountDialog" type="button">×</button></div>
+      <input id="discountId" type="hidden">
+      <label class="field"><span>Nombre del descuento</span><input id="discountName" maxlength="60" placeholder="Ej. Tarjeta empresa"></label>
+      <label class="field"><span>Aplicar a estación o marca</span><input id="discountStation" maxlength="80" placeholder="Vacío para todas"></label>
+      <div class="field-grid"><label class="field"><span>Combustible</span><select id="discountFuel"><option value="all">Todos</option></select></label><label class="field"><span>Tipo</span><select id="discountType"><option value="perLiter">Euros por litro</option><option value="percent">Porcentaje</option></select></label><label class="field"><span>Valor</span><input id="discountValue" type="number" min="0.001" max="100" step="0.001" value="0.05"></label></div>
+      <p id="discountError" class="form-error" hidden></p><button class="primary-btn" type="submit">Guardar descuento</button>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="dialog form-dialog">
+    <form class="dialog-panel" id="settingsForm">
+      <div class="dialog-title sticky-dialog-title"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Ajustes</h2></div><button class="dialog-close inline" data-close-dialog="settingsDialog" type="button">×</button></div>
+      <fieldset>
+        <legend>Servidor seguro Supabase</legend>
+        <p>La clave privada de Precioil y la clave service_role se guardan únicamente en el servidor. La aplicación utiliza la clave pública de conexión y un código personal guardado solo en tu dispositivo.</p>
+        <label class="field"><span>URL de Edge Functions</span><input id="supabaseFunctionsUrl" inputmode="url" placeholder="https://TU-PROYECTO.supabase.co/functions/v1"></label>
+        <label class="field"><span>Clave pública de Supabase</span><input id="supabasePublishableKey" type="password" autocomplete="off" placeholder="sb_publishable_…"></label>
+        <label class="field"><span>Código personal de acceso</span><input id="appAccessToken" type="password" autocomplete="off" placeholder="Código configurado como secreto en Supabase"></label>
+        <div class="server-test-row"><button class="secondary-btn" id="testServer" type="button">Comprobar servidor</button><span id="serverStatus">Sin comprobar</span></div>
+      </fieldset>
+      <fieldset><legend>Mapa</legend><p>La clave de Maps JavaScript es una clave pública de navegador. Debe estar restringida al dominio de Combusplus y únicamente a Maps JavaScript API.</p><label class="field"><span>Maps JavaScript API key</span><input id="googleMapsKey" type="password" autocomplete="off" placeholder="AIza…"></label><label class="field"><span>Map ID <small>(opcional)</small></span><input id="googleMapId" placeholder="DEMO_MAP_ID"></label></fieldset>
+      <fieldset><legend>Notificaciones</legend><label class="check-row"><input id="notificationsEnabled" type="checkbox"><span>Avisar de cambios de precio en favoritas</span></label><div class="field-grid"><label class="field"><span>Comprobar cada</span><select id="notificationInterval"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6" selected>6 horas</option><option value="12">12 horas</option><option value="24">24 horas</option></select></label><label class="field"><span>Cambio mínimo</span><div class="input-unit"><input id="notificationThreshold" type="number" min="0.001" max="1" step="0.001" value="0.001"><em>€/l</em></div></label><label class="field"><span>Notificar</span><select id="notificationDirection"><option value="both">Subidas y bajadas</option><option value="down">Solo bajadas</option><option value="up">Solo subidas</option></select></label></div><button class="secondary-btn" id="requestNotifications" type="button">Conceder permiso</button></fieldset>
+      <p id="settingsError" class="form-error" hidden></p><button class="primary-btn dialog-save" type="submit">Guardar ajustes</button>
+    </form>
+  </dialog>
+
+  <template id="stationCardTemplate"><article class="station-card"><button class="station-main" type="button"><div class="station-head"><div><strong class="station-name"></strong><span class="station-address"></span></div><span class="station-open"></span></div><div class="station-price-row"><div><span class="station-fuel-label"></span><strong class="station-price"></strong><small class="station-discount"></small></div><div class="station-side"><strong class="station-distance"></strong><span class="station-hours"></span></div></div><div class="station-value-row"><span class="station-net"></span><span class="station-rank-note"></span></div></button><div class="station-card-actions"><button class="favorite-btn" type="button" aria-label="Favorita">☆</button><button class="secondary-btn compare-btn" type="button">Comparar</button><a class="secondary-btn route-btn" target="_blank" rel="noopener noreferrer">Ruta</a></div></article></template>
+  <template id="favoriteCardTemplate"><article class="favorite-card"><div class="favorite-head"><button class="favorite-open" type="button"><strong class="favorite-name"></strong><span class="favorite-address"></span></button><button class="favorite-remove" type="button" aria-label="Quitar favorita">★</button></div><div class="favorite-config"><label><span>Combustible vigilado</span><select class="favorite-fuel"></select></label><label class="check-row"><input class="favorite-alert" type="checkbox"><span>Notificaciones</span></label></div><div class="favorite-price"><span>Último precio</span><strong class="favorite-current-price">—</strong><small class="favorite-change"></small></div></article></template>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
