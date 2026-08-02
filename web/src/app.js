@@ -101,6 +101,7 @@ const el = {
   bestPrice: $('#bestPrice'),
   bestDistance: $('#bestDistance'),
   bestNetLiters: $('#bestNetLiters'),
+  bestRefuelCost: $('#bestRefuelCost'),
   bestSaving: $('#bestSaving'),
   bestSavingCopy: $('#bestSavingCopy'),
   bestRoute: $('#bestRoute'),
@@ -680,8 +681,14 @@ function renderBestResult() {
   el.bestName.textContent = best.name;
   el.bestAddress.textContent = best.address;
   el.bestPrice.textContent = `${num(best.price)} €/l`;
-  el.bestDistance.textContent = `${num(best.roadDistanceKm, 1)} km`;
+  const isRoundTrip = simulation.input.tripMode !== 'oneway';
+  const calculatedTripKm = Number(best.tripKm ?? (best.roadDistanceKm * (isRoundTrip ? 2 : 1)));
+  const refuelCost = simulation.mode === 'fullTank'
+    ? Number(best.tankCost ?? simulation.input.amount)
+    : Number(simulation.input.amount);
+  el.bestDistance.textContent = `${num(calculatedTripKm, 1)} km · ${isRoundTrip ? 'ida y vuelta' : 'solo ida'}`;
   el.bestNetLiters.textContent = `${num(best.netLiters, 2)} l`;
+  if (el.bestRefuelCost) el.bestRefuelCost.textContent = euro.format(refuelCost);
   el.bestSaving.textContent = euro.format(saving);
   el.bestSavingCopy.textContent = simulation.mode === 'fullTank'
     ? (nearest.id === best.id ? 'la opción más cercana también es la mejor para llenar el depósito' : `frente a llenar el depósito en ${nearest.name}`)
@@ -831,7 +838,7 @@ function renderFavorites() {
 }
 
 function renderHomeWidgets() {
-  if (!el.favoriteWidgetList || !el.fullTankHint) return;
+  if (!el.favoriteWidgetList) return;
   el.favoriteWidgetList.replaceChildren();
   const favorites = state.favorites.slice(0, 3);
   if (!favorites.length) {
@@ -860,9 +867,11 @@ function renderHomeWidgets() {
     }
   }
   const vehicle = activeVehicle();
-  el.fullTankHint.textContent = vehicle
-    ? `${vehicle.name} · ${fuelLabel(vehicle.fuelKey)} · depósito de ${num(Number(vehicle.tank), 0)} l`
-    : 'Añade un vehículo con consumo, combustible y capacidad de depósito.';
+  if (el.fullTankHint) {
+    el.fullTankHint.textContent = vehicle
+      ? `${vehicle.name} · ${fuelLabel(vehicle.fuelKey)} · depósito de ${num(Number(vehicle.tank), 0)} l`
+      : 'Añade un vehículo con consumo, combustible y capacidad de depósito.';
+  }
 }
 
 function recordSnapshots(stations) {
@@ -1482,6 +1491,15 @@ function bind() {
   el.quickFuel.addEventListener('change', () => { state.filters.fuelKey = el.quickFuel.value; el.listFuel.value = el.quickFuel.value; saveFilters(); });
   el.quickAmount.addEventListener('change', () => { state.filters.amount = Number(el.quickAmount.value); saveFilters(); });
   el.quickRadius.addEventListener('change', () => { state.filters.radius = Number(el.quickRadius.value); el.listRadius.value = el.quickRadius.value; saveFilters(); });
+  $$('input[name="quickTrip"]').forEach(input => input.addEventListener('change', () => {
+    state.filters.tripMode = input.value;
+    saveFilters();
+    if (state.currentSimulation) {
+      state.currentSimulation = null;
+      el.bestResult.hidden = true;
+      renderStations();
+    }
+  }));
   el.refreshLocation.addEventListener('click', async () => {
     try { await requestPosition(true); toast('Ubicación actualizada'); }
     catch (error) { showError(el.quickSearchError, error.message); }
