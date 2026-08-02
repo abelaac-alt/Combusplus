@@ -16,8 +16,8 @@ android {
         applicationId = "com.grupomds.combusplus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "5.2.0"
+        versionCode = 8
+        versionName = "5.3.0"
         buildConfigField("String", "WEB_APP_URL", "\"${webAppUrl.get()}\"")
     }
 
@@ -51,6 +51,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.core:core:1.16.0")
     implementation("androidx.work:work-runtime:2.11.2")
 }
 

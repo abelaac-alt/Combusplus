@@ -121,7 +121,7 @@ public class PriceWatchWorker extends Worker {
         connection.setConnectTimeout(12000);
         connection.setReadTimeout(12000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroid/5.0");
+        connection.setRequestProperty("User-Agent", "CombusplusAndroid/5.3");
         if (apiKey != null && !apiKey.trim().isEmpty()) connection.setRequestProperty("X-API-Key", apiKey);
         if (clientToken != null && !clientToken.trim().isEmpty()) connection.setRequestProperty("X-Combusplus-Client", clientToken);
         int status = connection.getResponseCode();

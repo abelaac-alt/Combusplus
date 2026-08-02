@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.GeolocationPermissions;
 import android.webkit.WebChromeClient;
@@ -16,6 +17,11 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import java.net.URI;
 
@@ -32,9 +38,26 @@ public class MainActivity extends Activity {
         NotificationHelper.createChannel(this);
         PriceWatchScheduler.restore(this);
 
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+
         webView = new WebView(this);
-        webView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        webView.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        webView.setBackgroundColor(0xFFF3F4F6);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setHorizontalScrollBarEnabled(false);
         setContentView(webView);
+
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
+            Insets bars = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(webView);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -46,7 +69,13 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/5.0");
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setUseWideViewPort(false);
+        settings.setLoadWithOverviewMode(false);
+        settings.setTextZoom(100);
+        settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/5.3");
 
         webView.addJavascriptInterface(new WebBridge(this), "AndroidBridge");
         webView.setWebChromeClient(new WebChromeClient() {
@@ -57,16 +86,24 @@ public class MainActivity extends Activity {
                 } else {
                     pendingGeoOrigin = origin;
                     pendingGeoCallback = callback;
-                    requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_REQUEST);
+                    requestPermissions(
+                            new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
+                            LOCATION_REQUEST
+                    );
                 }
             }
         });
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (isTrusted(uri)) return false;
-                startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Exception ignored) {
+                    // El enlace externo no tiene una aplicación compatible.
+                }
                 return true;
             }
 
@@ -88,6 +125,17 @@ public class MainActivity extends Activity {
                     loadLocalFallback(view);
                 }
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                view.evaluateJavascript(
+                        "document.documentElement.classList.add('native-shell');" +
+                        "document.documentElement.style.overflowX='hidden';" +
+                        "document.body.style.overflowX='hidden';",
+                        null
+                );
+            }
         });
 
         String page = getIntent().getStringExtra("open_page");
@@ -101,7 +149,9 @@ public class MainActivity extends Activity {
         if ("file".equalsIgnoreCase(uri.getScheme())) return true;
         try {
             URI configured = URI.create(BuildConfig.WEB_APP_URL);
-            return "https".equalsIgnoreCase(uri.getScheme()) && configured.getHost() != null && configured.getHost().equalsIgnoreCase(uri.getHost());
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    && configured.getHost() != null
+                    && configured.getHost().equalsIgnoreCase(uri.getHost());
         } catch (Exception ignored) {
             return false;
         }
@@ -119,7 +169,8 @@ public class MainActivity extends Activity {
     }
 
     public void requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1002);
         }
     }
