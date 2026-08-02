@@ -60,7 +60,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Subir web
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: web
 
