@@ -7,6 +7,7 @@ import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -38,6 +39,11 @@ public class PriceWatchWorker extends Worker {
             JSONArray favorites = config.optJSONArray("favorites");
             if (favorites == null || favorites.length() == 0) return Result.success();
 
+            NativeSessionManager.Session session = NativeSessionManager.ensureSession(
+                    getApplicationContext(),
+                    "android-worker"
+            );
+
             double threshold = Math.max(0.001, config.optDouble("threshold", 0.001));
             String direction = config.optString("direction", "both");
             boolean hadTemporaryFailure = false;
@@ -47,38 +53,55 @@ public class PriceWatchWorker extends Worker {
                 if (favorite == null) continue;
                 boolean notifyThisFavorite = notificationsEnabled && favorite.optBoolean("notifications", true);
                 try {
-                    checkFavorite(config, favorite, threshold, direction, notifyThisFavorite);
+                    checkFavorite(config, favorite, threshold, direction, notifyThisFavorite, session);
                 } catch (Exception exception) {
                     hadTemporaryFailure = true;
                 }
             }
             AppWidgetUpdater.updateAll(getApplicationContext());
             return hadTemporaryFailure ? Result.retry() : Result.success();
-        } catch (Exception exception) {
+        } catch (JSONException exception) {
             return Result.failure();
+        } catch (Exception exception) {
+            return Result.retry();
         }
     }
 
-    private void checkFavorite(JSONObject config, JSONObject favorite, double threshold, String direction, boolean notify) throws Exception {
+    private void checkFavorite(
+            JSONObject config,
+            JSONObject favorite,
+            double threshold,
+            String direction,
+            boolean notify,
+            NativeSessionManager.Session session
+    ) throws Exception {
         double latitude = favorite.optDouble("latitude", Double.NaN);
         double longitude = favorite.optDouble("longitude", Double.NaN);
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
 
-        String functionsUrl = config.optString("supabaseFunctionsUrl", "").replaceAll("/+$", "");
-        String publishableKey = config.optString("supabasePublishableKey", "");
-        String sessionToken = config.optString("sessionToken", "");
-        String installationId = config.optString("installationId", "");
-        long sessionExpiresAt = config.optLong("sessionExpiresAt", 0L);
-        if (functionsUrl.trim().isEmpty() || publishableKey.trim().isEmpty()
-                || sessionToken.trim().isEmpty() || installationId.trim().isEmpty()
-                || sessionExpiresAt <= System.currentTimeMillis()) return;
+        String functionsUrl = BuildConfig.SUPABASE_FUNCTIONS_URL.replaceAll("/+$", "");
+        String publishableKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY;
+        if (functionsUrl.trim().isEmpty() || session == null
+                || session.token.trim().isEmpty() || session.installationId.trim().isEmpty()) return;
 
         String query = "latitud=" + encode(String.format(Locale.US, "%.6f", latitude)) +
                 "&longitud=" + encode(String.format(Locale.US, "%.6f", longitude)) +
                 "&radio=1&pagina=1&limite=50&fields=current";
         String endpoint = functionsUrl + "/stations-nearby?" + query;
 
-        JSONObject response = getJson(endpoint, publishableKey, sessionToken, installationId);
+        JSONObject response;
+        try {
+            response = getJson(endpoint, publishableKey, session.token, session.installationId);
+        } catch (HttpStatusException error) {
+            if (error.status != 401) throw error;
+            NativeSessionManager.clearSession(getApplicationContext());
+            NativeSessionManager.Session renewed = NativeSessionManager.ensureSession(
+                    getApplicationContext(),
+                    "android-worker",
+                    true
+            );
+            response = getJson(endpoint, publishableKey, renewed.token, renewed.installationId);
+        }
         JSONArray stations = findStationArray(response);
         if (stations == null) return;
 
@@ -121,20 +144,42 @@ public class PriceWatchWorker extends Worker {
         connection.setConnectTimeout(12000);
         connection.setReadTimeout(12000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroid/8.0");
+        connection.setRequestProperty("User-Agent", "CombusplusAndroid/9.0");
         connection.setRequestProperty("apikey", publishableKey);
         connection.setRequestProperty("Authorization", "Bearer " + publishableKey);
         connection.setRequestProperty("X-Combusplus-Session", sessionToken);
         connection.setRequestProperty("X-Installation-Id", installationId);
         int status = connection.getResponseCode();
-        if (status < 200 || status >= 300) throw new IllegalStateException("HTTP " + status);
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+        java.io.InputStream stream = status >= 200 && status < 300
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+        if (stream == null) {
+            connection.disconnect();
+            throw new HttpStatusException(status, "El servidor no devolvió información.");
+        }
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder body = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) body.append(line);
-            return new JSONObject(body.toString());
+            JSONObject json = new JSONObject(body.length() == 0 ? "{}" : body.toString());
+            if (status < 200 || status >= 300) {
+                throw new HttpStatusException(
+                        status,
+                        json.optString("error", "Error del servidor (" + status + ").")
+                );
+            }
+            return json;
         } finally {
             connection.disconnect();
+        }
+    }
+
+    private static final class HttpStatusException extends Exception {
+        final int status;
+
+        HttpStatusException(int status, String message) {
+            super(message);
+            this.status = status;
         }
     }
 

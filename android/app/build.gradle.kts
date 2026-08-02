@@ -23,8 +23,8 @@ android {
         applicationId = "com.grupomds.combusplus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 30
-        versionName = "8.0.0"
+        versionCode = 40
+        versionName = "9.0.0"
         buildConfigField("String", "WEB_APP_URL", javaString(webAppUrl.get()))
         buildConfigField("String", "SUPABASE_FUNCTIONS_URL", javaString(functionsUrl.get()))
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", javaString(publishableKey.get()))
@@ -91,6 +91,6 @@ dependencies {
 val syncWebAssets by tasks.registering(Copy::class) {
     from("../../web")
     into("src/main/assets/www")
-    exclude("tests/**", "package.json", "package-lock.json", ".nojekyll")
+    exclude("tests/**", "node_modules/**", "package.json", "package-lock.json", ".nojekyll")
 }
 tasks.named("preBuild").configure { dependsOn(syncWebAssets) }

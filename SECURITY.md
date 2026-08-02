@@ -18,4 +18,4 @@ No publiques incidencias que contengan claves, tokens, contraseñas, archivos de
 
 Antes de publicar, sustituye este apartado por un correo privado de seguridad del responsable. Incluye versión, pasos de reproducción e impacto, pero nunca datos reales de usuarios.
 
-Consulta [docs/SECURITY_V8.md](docs/SECURITY_V8.md) para el modelo técnico completo.
+Consulta [docs/SECURITY_V9.md](docs/SECURITY_V9.md) para el modelo técnico completo.

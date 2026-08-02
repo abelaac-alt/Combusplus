@@ -4,8 +4,8 @@
 
 - [ ] AAB release generado por `Publicar Android (AAB y APK)`.
 - [ ] `applicationId`: `com.grupomds.combusplus`.
-- [ ] `versionCode`: 30.
-- [ ] `versionName`: 8.0.0.
+- [ ] `versionCode`: 40.
+- [ ] `versionName`: 9.0.0.
 - [ ] Target API 36.
 - [ ] Play App Signing activado.
 - [ ] Clave de subida guardada de forma segura.

@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse(req, {
       ok: true,
-      version: '8.0.0',
+      version: '9.0.0',
       items,
       count: items.length,
       cache: {

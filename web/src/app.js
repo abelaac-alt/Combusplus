@@ -14,6 +14,7 @@ import {
 } from './core.js';
 
 const RUNTIME_CONFIG = window.COMBUSPLUS_CONFIG || {};
+const APP_VERSION = String(RUNTIME_CONFIG.version || '9.0.0');
 
 const STORAGE = {
   settings: 'combusplus.v5.settings',
@@ -213,6 +214,7 @@ const el = {
   notificationThreshold: $('#notificationThreshold'),
   notificationDirection: $('#notificationDirection'),
   requestNotifications: $('#requestNotifications'),
+  clearLocalData: $('#clearLocalData'),
   settingsError: $('#settingsError'),
 
   stationCardTemplate: $('#stationCardTemplate'),
@@ -289,13 +291,21 @@ function isNative() {
 
 function loadState() {
   const savedSettings = readJSON(STORAGE.settings, {});
-  state.settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-  // La infraestructura se configura durante el despliegue y no se solicita al usuario.
-  // Los valores de runtime siempre prevalecen sobre configuraciones antiguas en caché.
-  state.settings.supabaseFunctionsUrl = String(RUNTIME_CONFIG.supabaseFunctionsUrl || state.settings.supabaseFunctionsUrl || '').replace(/\/$/, '');
-  state.settings.supabasePublishableKey = String(RUNTIME_CONFIG.supabasePublishableKey || state.settings.supabasePublishableKey || '');
-  state.settings.googleMapsKey = String(RUNTIME_CONFIG.googleMapsKey || state.settings.googleMapsKey || '');
-  state.settings.googleMapId = String(RUNTIME_CONFIG.googleMapId || state.settings.googleMapId || '');
+  state.settings = {
+    ...DEFAULT_SETTINGS,
+    notificationsEnabled: Boolean(savedSettings.notificationsEnabled),
+    notificationInterval: Number(savedSettings.notificationInterval || DEFAULT_SETTINGS.notificationInterval),
+    notificationThreshold: Number(savedSettings.notificationThreshold || DEFAULT_SETTINGS.notificationThreshold),
+    notificationDirection: ['both', 'down', 'up'].includes(savedSettings.notificationDirection)
+      ? savedSettings.notificationDirection
+      : DEFAULT_SETTINGS.notificationDirection
+  };
+  // La infraestructura se inyecta en cada despliegue. No se reutilizan URL o claves
+  // antiguas guardadas en caché para evitar configuraciones obsoletas o manipuladas.
+  state.settings.supabaseFunctionsUrl = String(RUNTIME_CONFIG.supabaseFunctionsUrl || '').replace(/\/$/, '');
+  state.settings.supabasePublishableKey = String(RUNTIME_CONFIG.supabasePublishableKey || '');
+  state.settings.googleMapsKey = String(RUNTIME_CONFIG.googleMapsKey || '');
+  state.settings.googleMapId = String(RUNTIME_CONFIG.googleMapId || '');
   state.filters = { ...DEFAULT_FILTERS, ...readJSON(STORAGE.filters, {}) };
   state.vehicles = readJSON(STORAGE.vehicles, []);
   state.selectedVehicleId = readStoredValue(STORAGE.selectedVehicle) || '';
@@ -541,7 +551,7 @@ async function ensureBackendSession(force = false) {
         body: JSON.stringify({
           installationId: id,
           platform,
-          appVersion: String(RUNTIME_CONFIG.version || '8.0.0'),
+          appVersion: APP_VERSION,
           requestHash,
           integrityToken: integrityToken || undefined
         })
@@ -558,6 +568,7 @@ async function ensureBackendSession(force = false) {
     state.backendSession.expiresAt = expiresAt;
     writeStoredValue(STORAGE.sessionToken, payload.sessionToken);
     writeStoredValue(STORAGE.sessionExpiresAt, String(expiresAt));
+    syncNativeConfig();
     return payload.sessionToken;
   })();
 
@@ -1711,15 +1722,31 @@ function populateFilters() {
   el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));
 }
 
+function clearAllLocalData() {
+  const confirmed = confirm('¿Borrar todos los datos guardados en este dispositivo? Esta acción no se puede deshacer.');
+  if (!confirmed) return;
+  for (const key of Object.values(STORAGE)) removeStoredValue(key);
+  clearBackendSession();
+  try { window.AndroidBridge?.syncNotificationConfig?.('{}'); } catch { /* no nativo */ }
+  location.replace('./');
+}
+
 function exportData() {
   const blob = new Blob([JSON.stringify({
+    format: 'combusplus-local-export',
+    version: APP_VERSION,
     exportedAt: nowIso(),
     vehicles: state.vehicles,
-    discounts: state.discounts,
+    selectedVehicleId: state.selectedVehicleId,
     favorites: state.favorites,
     discounts: state.discounts,
     history: state.history,
-    settings: { ...state.settings, supabasePublishableKey: '', googleMapsKey: '' }
+    preferences: {
+      notificationsEnabled: state.settings.notificationsEnabled,
+      notificationInterval: state.settings.notificationInterval,
+      notificationThreshold: state.settings.notificationThreshold,
+      notificationDirection: state.settings.notificationDirection
+    }
   }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -1828,6 +1855,7 @@ function bind() {
   el.discountForm.addEventListener('submit', saveDiscountForm);
   el.settingsForm.addEventListener('submit', saveSettingsForm);
   el.requestNotifications.addEventListener('click', requestNotificationPermission);
+  el.clearLocalData?.addEventListener('click', clearAllLocalData);
 }
 
 function init() {
@@ -1876,5 +1904,5 @@ function init() {
 
 init();
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }

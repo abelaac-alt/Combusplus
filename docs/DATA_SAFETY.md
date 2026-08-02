@@ -1,6 +1,6 @@
 # Guía para Seguridad de los datos de Google Play
 
-Esta guía refleja el código incluido en Combusplus 8.0. Debe revisarse nuevamente si se añaden analítica, publicidad, Firebase, pagos u otros SDKs.
+Esta guía refleja el código incluido en Combusplus 9.0. Debe revisarse nuevamente si se añaden analítica, publicidad, Firebase, pagos u otros SDKs.
 
 ## Comportamiento actual
 

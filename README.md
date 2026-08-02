@@ -1,32 +1,37 @@
-# Combusplus 8.0
+# Combusplus 9.0
 
-Aplicación web, Android y Android Auto para encontrar la gasolinera económicamente más conveniente según precio, distancia, consumo, importe o depósito completo y modalidad de trayecto.
+Combusplus busca la gasolinera más rentable según el precio, la distancia, el consumo real del vehículo, el importe o depósito completo, los descuentos y el trayecto de ida o ida y vuelta.
 
-## Principios de la versión 8
+## Incluido
 
-- sin registro ni cuentas;
-- datos personales de uso guardados en el dispositivo;
-- almacenamiento Android cifrado mediante Keystore;
-- backend Supabase para precios, histórico, cálculo y seguridad;
-- claves privadas fuera del cliente;
-- sesiones anónimas por instalación;
-- límites de uso;
-- Play Integrity preparado;
-- AAB de producción mediante GitHub Actions;
-- Android Auto, widgets y notificaciones.
+- Web/PWA, APK y AAB Android.
+- Backend Supabase con precios, histórico y cálculo en servidor.
+- Uso sin registro: cada instalación funciona de forma anónima.
+- Vehículos, favoritas, descuentos e historial almacenados localmente.
+- Cifrado local Android con AES-256-GCM y Android Keystore.
+- Sesiones anónimas firmadas, rate limiting y registro técnico de seguridad.
+- Play Integrity preparado para modo `optional` y `enforce`.
+- Google Maps con mapa alternativo cuando el proveedor no responde.
+- Comparación entre la mejor gasolinera y una seleccionada.
+- Búsqueda por importe o depósito lleno.
+- Cálculo de solo ida o ida y vuelta.
+- Android Auto, widgets y notificaciones de precios.
+- Renovación automática de sesión desde Android Auto y WorkManager.
+- Generación automática de APK de prueba y AAB release firmado.
+- CodeQL y Dependabot para mantenimiento de seguridad.
 
 ## Instalación
 
-Consulta [docs/INSTALLATION_V8.md](docs/INSTALLATION_V8.md).
-
-## Seguridad
-
-Consulta [docs/SECURITY_V8.md](docs/SECURITY_V8.md).
+Consulta [docs/INSTALLATION_V9.md](docs/INSTALLATION_V9.md).
 
 ## Publicación
 
-Consulta [docs/PLAY_STORE_CHECKLIST.md](docs/PLAY_STORE_CHECKLIST.md).
+Consulta [docs/PLAY_STORE_CHECKLIST.md](docs/PLAY_STORE_CHECKLIST.md) y [docs/GOOGLE_PLAY_LISTING_ES.md](docs/GOOGLE_PLAY_LISTING_ES.md).
 
-## Importante
+## Seguridad
 
-Antes de publicar debes incorporar los datos legales reales del responsable en `web/privacy.html`, configurar Play Console, completar Seguridad de los datos y ejecutar pruebas en dispositivos reales. Ningún código puede garantizar ausencia absoluta de vulnerabilidades ni aprobación automática por Google Play.
+Consulta [docs/SECURITY_V9.md](docs/SECURITY_V9.md).
+
+## Limitaciones reales
+
+Ninguna aplicación puede garantizar que sea imposible de atacar o que Google Play la apruebe automáticamente. Antes de publicar deben completarse los datos legales de `web/privacy.html`, configurar Play Integrity en Play Console, probar el AAB en una pista interna y revisar la declaración de Seguridad de los datos.

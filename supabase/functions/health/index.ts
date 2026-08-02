@@ -7,7 +7,7 @@ Deno.serve((req) => {
   return jsonResponse(req, {
     ok: true,
     service: 'Combusplus Backend',
-    version: '8.0.0',
+    version: '9.0.0',
     time: new Date().toISOString(),
   }, 200, 'public, max-age=60');
 });

@@ -9,6 +9,7 @@ import android.location.LocationManager;
 import androidx.core.content.ContextCompat;
 
 import com.grupomds.combusplus.BuildConfig;
+import com.grupomds.combusplus.NativeSessionManager;
 import com.grupomds.combusplus.SecureLocalStore;
 import com.grupomds.combusplus.WebBridge;
 
@@ -54,12 +55,10 @@ final class CarStationRepository {
         }
 
         JSONObject nativeConfig = readNativeConfig(context);
-        String sessionToken = nativeConfig.optString("sessionToken", "");
-        String installationId = nativeConfig.optString("installationId", "");
-        long sessionExpiresAt = nativeConfig.optLong("sessionExpiresAt", 0L);
-        if (sessionToken.isEmpty() || installationId.isEmpty() || sessionExpiresAt <= System.currentTimeMillis()) {
-            throw new IllegalStateException("Abre Combusplus en el móvil para renovar la sesión segura.");
-        }
+        NativeSessionManager.Session session = NativeSessionManager.ensureSession(
+                context,
+                "android-auto"
+        );
 
         JSONObject request = new JSONObject();
         request.put("latitude", origin.latitude);
@@ -76,13 +75,27 @@ final class CarStationRepository {
                 ? new JSONArray()
                 : nativeConfig.optJSONArray("discounts"));
 
-        JSONObject response = requestJson(
-                base + "/recommend",
-                request,
-                safe(BuildConfig.SUPABASE_PUBLISHABLE_KEY),
-                sessionToken,
-                installationId
-        );
+        JSONObject response;
+        try {
+            response = requestJson(
+                    base + "/recommend",
+                    request,
+                    safe(BuildConfig.SUPABASE_PUBLISHABLE_KEY),
+                    session.token,
+                    session.installationId
+            );
+        } catch (HttpStatusException error) {
+            if (error.status != 401) throw error;
+            NativeSessionManager.clearSession(context);
+            session = NativeSessionManager.ensureSession(context, "android-auto", true);
+            response = requestJson(
+                    base + "/recommend",
+                    request,
+                    safe(BuildConfig.SUPABASE_PUBLISHABLE_KEY),
+                    session.token,
+                    session.installationId
+            );
+        }
         if (!response.optBoolean("ok", false)) {
             throw new IOException(response.optString("error", "No se pudieron cargar las gasolineras."));
         }
@@ -102,7 +115,7 @@ final class CarStationRepository {
         if (item == null) return null;
         double latitude = item.optDouble("latitude", Double.NaN);
         double longitude = item.optDouble("longitude", Double.NaN);
-        double distanceKm = item.optDouble("distanceKm", Double.NaN);
+        double distanceKm = item.optDouble("roadDistanceKm", item.optDouble("distanceKm", Double.NaN));
         double price = item.optDouble("price", Double.NaN);
         double tankCost = item.optDouble("tankCost", Double.NaN);
         double tripLiters = item.optDouble("tripLiters", Double.NaN);
@@ -213,8 +226,11 @@ final class CarStationRepository {
         connection.setDoOutput(true);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroidAuto/8.0");
-        if (!publishableKey.isEmpty()) connection.setRequestProperty("apikey", publishableKey);
+        connection.setRequestProperty("User-Agent", "CombusplusAndroidAuto/9.0");
+        if (!publishableKey.isEmpty()) {
+            connection.setRequestProperty("apikey", publishableKey);
+            connection.setRequestProperty("Authorization", "Bearer " + publishableKey);
+        }
         connection.setRequestProperty("X-Combusplus-Session", sessionToken);
         connection.setRequestProperty("X-Installation-Id", installationId);
         byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
@@ -231,9 +247,22 @@ final class CarStationRepository {
         if (responseBody.isEmpty()) throw new IOException("El servidor no devolvió información.");
         JSONObject json = new JSONObject(responseBody);
         if (status < 200 || status >= 300) {
-            throw new IOException(json.optString("error", "Error del servidor (" + status + ")."));
+            throw new HttpStatusException(
+                    status,
+                    json.optString("error", "Error del servidor (" + status + ").")
+            );
         }
         return json;
+    }
+
+
+    private static final class HttpStatusException extends IOException {
+        final int status;
+
+        HttpStatusException(int status, String message) {
+            super(message);
+            this.status = status;
+        }
     }
 
     private static String readStream(InputStream stream) throws IOException {
