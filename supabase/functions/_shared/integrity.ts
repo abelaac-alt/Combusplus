@@ -1,4 +1,4 @@
-import { base64UrlEncode, utf8 } from './encoding.ts';
+import { base64UrlEncode, cryptoBuffer, utf8 } from './encoding.ts';
 
 interface ServiceAccount {
   client_email: string;
@@ -40,12 +40,18 @@ async function googleAccessToken(account: ServiceAccount): Promise<string> {
   const unsigned = `${header}.${payload}`;
   const key = await crypto.subtle.importKey(
     'pkcs8',
-    pemToPkcs8(account.private_key),
+    cryptoBuffer(pemToPkcs8(account.private_key)),
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false,
     ['sign'],
   );
-  const signature = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, utf8(unsigned)));
+  const signature = new Uint8Array(
+    await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      key,
+      cryptoBuffer(utf8(unsigned)),
+    ),
+  );
   const assertion = `${unsigned}.${base64UrlEncode(signature)}`;
   const response = await fetch(account.token_uri || 'https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -56,7 +62,9 @@ async function googleAccessToken(account: ServiceAccount): Promise<string> {
     }),
   });
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok || typeof body.access_token !== 'string') throw new Error('No se pudo autenticar Play Integrity.');
+  if (!response.ok || typeof body.access_token !== 'string') {
+    throw new Error('No se pudo autenticar Play Integrity.');
+  }
   cachedAccessToken = body.access_token;
   cachedAccessTokenExpiresAt = Date.now() + Math.max(300, Number(body.expires_in || 3600) - 60) * 1000;
   return cachedAccessToken;
@@ -103,7 +111,8 @@ export async function verifyPlayIntegrity(input: {
     const deviceIntegrity = payload.deviceIntegrity || {};
     const accountDetails = payload.accountDetails || {};
     const deviceVerdicts: string[] = Array.isArray(deviceIntegrity.deviceRecognitionVerdict)
-      ? deviceIntegrity.deviceRecognitionVerdict : [];
+      ? deviceIntegrity.deviceRecognitionVerdict
+      : [];
 
     const validPackage = requestDetails.requestPackageName === packageName;
     const validHash = requestDetails.requestHash === input.requestHash;
@@ -111,7 +120,9 @@ export async function verifyPlayIntegrity(input: {
     const licensed = accountDetails.appLicensingVerdict === 'LICENSED';
     const device = deviceVerdicts.includes('MEETS_DEVICE_INTEGRITY');
     const strong = deviceVerdicts.includes('MEETS_STRONG_INTEGRITY');
-    const accepted = validPackage && validHash && recognized && device && (currentMode !== 'enforce' || licensed);
+    const accepted = validPackage && validHash && recognized && device &&
+      (currentMode !== 'enforce' || licensed);
+
     if (!accepted) {
       return currentMode === 'enforce'
         ? { accepted: false, level: 'rejected', reason: 'La instalación no superó la validación de Google Play.' }
@@ -120,7 +131,11 @@ export async function verifyPlayIntegrity(input: {
     return { accepted: true, level: strong ? 'strong-integrity' : 'device-integrity' };
   } catch (error) {
     return currentMode === 'enforce'
-      ? { accepted: false, level: 'rejected', reason: error instanceof Error ? error.message : 'Error de Play Integrity.' }
+      ? {
+          accepted: false,
+          level: 'rejected',
+          reason: error instanceof Error ? error.message : 'Error de Play Integrity.',
+        }
       : { accepted: true, level: 'rejected' };
   }
 }

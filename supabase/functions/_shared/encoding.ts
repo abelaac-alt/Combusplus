@@ -18,8 +18,18 @@ export function decodeUtf8(value: Uint8Array): string {
   return new TextDecoder().decode(value);
 }
 
+/**
+ * WebCrypto en Deno 2 exige un ArrayBuffer real, no ArrayBufferLike.
+ * Esta copia evita incompatibilidades de tipos con SharedArrayBuffer.
+ */
+export function cryptoBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 export async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', utf8(value));
+  const digest = await crypto.subtle.digest('SHA-256', cryptoBuffer(utf8(value)));
   return base64UrlEncode(new Uint8Array(digest));
 }
 

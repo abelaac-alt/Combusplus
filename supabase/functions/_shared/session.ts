@@ -1,4 +1,12 @@
-import { base64UrlDecode, base64UrlEncode, decodeUtf8, sha256, timingSafeEqual, utf8 } from './encoding.ts';
+import {
+  base64UrlDecode,
+  base64UrlEncode,
+  cryptoBuffer,
+  decodeUtf8,
+  sha256,
+  timingSafeEqual,
+  utf8,
+} from './encoding.ts';
 import { jsonResponse } from './security.ts';
 
 export type ClientPlatform = 'web' | 'android' | 'android-auto' | 'android-worker';
@@ -15,7 +23,6 @@ export interface SessionPayload {
   exp: number;
 }
 
-const encoder = new TextEncoder();
 let cachedKey: CryptoKey | null = null;
 
 async function signingKey(): Promise<CryptoKey> {
@@ -24,7 +31,7 @@ async function signingKey(): Promise<CryptoKey> {
   if (secret.length < 32) throw new Error('DEVICE_TOKEN_SECRET no está configurado correctamente.');
   cachedKey = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(secret),
+    cryptoBuffer(utf8(secret)),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign', 'verify'],
@@ -62,8 +69,13 @@ export async function issueSessionToken(input: {
   const header = base64UrlEncode(utf8(JSON.stringify({ alg: 'HS256', typ: 'JWT', kid: 'v1' })));
   const body = base64UrlEncode(utf8(JSON.stringify(payload)));
   const unsigned = `${header}.${body}`;
-  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', await signingKey(), utf8(unsigned)));
-  return { token: `${unsigned}.${base64UrlEncode(signature)}`, expiresAt: new Date(payload.exp * 1000).toISOString() };
+  const signature = new Uint8Array(
+    await crypto.subtle.sign('HMAC', await signingKey(), cryptoBuffer(utf8(unsigned))),
+  );
+  return {
+    token: `${unsigned}.${base64UrlEncode(signature)}`,
+    expiresAt: new Date(payload.exp * 1000).toISOString(),
+  };
 }
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
@@ -74,8 +86,8 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     const valid = await crypto.subtle.verify(
       'HMAC',
       await signingKey(),
-      base64UrlDecode(signaturePart),
-      utf8(unsigned),
+      cryptoBuffer(base64UrlDecode(signaturePart)),
+      cryptoBuffer(utf8(unsigned)),
     );
     if (!valid) return null;
     const header = JSON.parse(decodeUtf8(base64UrlDecode(headerPart))) as Record<string, unknown>;
