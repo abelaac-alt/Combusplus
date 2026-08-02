@@ -5,9 +5,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - 'android/**'
-      - '.github/workflows/build-apk.yml'
+      - "web/**"
+      - "android/**"
+      - ".github/workflows/build-apk.yml"
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
           cache: gradle
 
       - name: Configurar Android SDK
@@ -40,20 +40,37 @@ jobs:
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: '9.4.1'
+          gradle-version: "9.4.1"
 
       - name: Preparar configuración pública
         env:
           FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          GOOGLE_MAPS_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAP_ID: ${{ vars.GOOGLE_MAP_ID }}
         run: |
-          test -n "$FUNCTIONS_URL" || { echo "::error::Falta SUPABASE_FUNCTIONS_URL"; exit 1; }
-          test -n "$PUBLISHABLE_KEY" || { echo "::error::Falta SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          test -n "$FUNCTIONS_URL" || {
+            echo "::error::Falta SUPABASE_FUNCTIONS_URL"
+            exit 1
+          }
+
+          test -n "$PUBLISHABLE_KEY" || {
+            echo "::error::Falta SUPABASE_PUBLISHABLE_KEY"
+            exit 1
+          }
+
+          test -n "$GOOGLE_MAPS_KEY" || {
+            echo "::error::Falta GOOGLE_MAPS_API_KEY"
+            exit 1
+          }
+
           cat > web/config.js <<EOF_CONFIG
           window.COMBUSPLUS_CONFIG = Object.freeze({
-            version: '7.0.0',
+            version: '7.2.0',
             supabaseFunctionsUrl: '${FUNCTIONS_URL}',
-            supabasePublishableKey: '${PUBLISHABLE_KEY}'
+            supabasePublishableKey: '${PUBLISHABLE_KEY}',
+            googleMapsKey: '${GOOGLE_MAPS_KEY}',
+            googleMapId: '${GOOGLE_MAP_ID}'
           });
           EOF_CONFIG
 
@@ -62,9 +79,15 @@ jobs:
           rm -rf android/app/src/main/assets/www
           mkdir -p android/app/src/main/assets/www
           cp -R web/. android/app/src/main/assets/www/
-          rm -rf android/app/src/main/assets/www/tests android/app/src/main/assets/www/package.json android/app/src/main/assets/www/package-lock.json
+
+          rm -rf \
+            android/app/src/main/assets/www/tests \
+            android/app/src/main/assets/www/package.json \
+            android/app/src/main/assets/www/package-lock.json
+
           test -f android/app/src/main/assets/www/index.html
           test -f android/app/src/main/assets/www/src/app.js
+          test -f android/app/src/main/assets/www/config.js
 
       - name: Compilar APK
         working-directory: android
@@ -73,17 +96,24 @@ jobs:
       - name: Preparar APK
         run: |
           test -f android/app/build/outputs/apk/debug/app-debug.apk
+
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v7-debug.apk
-          sha256sum release/Combusplus-v7-debug.apk > release/Combusplus-v7-debug.apk.sha256
+
+          cp \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            release/Combusplus-v7.2-debug.apk
+
+          sha256sum \
+            release/Combusplus-v7.2-debug.apk \
+            > release/Combusplus-v7.2-debug.apk.sha256
 
       - name: Subir APK
         uses: actions/upload-artifact@v7
         with:
           name: Combusplus-APK-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
-            release/Combusplus-v7-debug.apk
-            release/Combusplus-v7-debug.apk.sha256
+            release/Combusplus-v7.2-debug.apk
+            release/Combusplus-v7.2-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
