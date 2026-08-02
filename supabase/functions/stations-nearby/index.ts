@@ -1,4 +1,4 @@
-import { clientIdentity, jsonResponse, preflight, requireAppToken, safeError } from '../_shared/security.ts';
+import { clientIdentity, jsonResponse, preflight, safeError } from '../_shared/security.ts';
 import { enforceRateLimit, nearbySnapshot, storeStations } from '../_shared/database.ts';
 import { fetchProviderStations } from '../_shared/provider.ts';
 
@@ -12,8 +12,6 @@ Deno.serve(async (req) => {
   if (options) return options;
   if (req.method !== 'GET') return jsonResponse(req, { ok: false, error: 'Método no permitido.' }, 405);
 
-  const authError = requireAppToken(req);
-  if (authError) return authError;
 
   try {
     const rateLimit = Number(Deno.env.get('RATE_LIMIT_PER_MINUTE') || '90');

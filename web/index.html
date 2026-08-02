@@ -211,15 +211,6 @@
   <dialog id="settingsDialog" class="dialog form-dialog">
     <form class="dialog-panel" id="settingsForm">
       <div class="dialog-title sticky-dialog-title"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Ajustes</h2></div><button class="dialog-close inline" data-close-dialog="settingsDialog" type="button">×</button></div>
-      <fieldset>
-        <legend>Servidor seguro Supabase</legend>
-        <p>La clave privada de Precioil y la clave service_role se guardan únicamente en el servidor. La aplicación utiliza la clave pública de conexión y un código personal guardado solo en tu dispositivo.</p>
-        <label class="field"><span>URL de Edge Functions</span><input id="supabaseFunctionsUrl" inputmode="url" placeholder="https://TU-PROYECTO.supabase.co/functions/v1"></label>
-        <label class="field"><span>Clave pública de Supabase</span><input id="supabasePublishableKey" type="password" autocomplete="off" placeholder="sb_publishable_…"></label>
-        <label class="field"><span>Código personal de acceso</span><input id="appAccessToken" type="password" autocomplete="off" placeholder="Código configurado como secreto en Supabase"></label>
-        <div class="server-test-row"><button class="secondary-btn" id="testServer" type="button">Comprobar servidor</button><span id="serverStatus">Sin comprobar</span></div>
-      </fieldset>
-      <fieldset><legend>Mapa</legend><p>La clave de Maps JavaScript es una clave pública de navegador. Debe estar restringida al dominio de Combusplus y únicamente a Maps JavaScript API.</p><label class="field"><span>Maps JavaScript API key</span><input id="googleMapsKey" type="password" autocomplete="off" placeholder="AIza…"></label><label class="field"><span>Map ID <small>(opcional)</small></span><input id="googleMapId" placeholder="DEMO_MAP_ID"></label></fieldset>
       <fieldset><legend>Notificaciones</legend><label class="check-row"><input id="notificationsEnabled" type="checkbox"><span>Avisar de cambios de precio en favoritas</span></label><div class="field-grid"><label class="field"><span>Comprobar cada</span><select id="notificationInterval"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6" selected>6 horas</option><option value="12">12 horas</option><option value="24">24 horas</option></select></label><label class="field"><span>Cambio mínimo</span><div class="input-unit"><input id="notificationThreshold" type="number" min="0.001" max="1" step="0.001" value="0.001"><em>€/l</em></div></label><label class="field"><span>Notificar</span><select id="notificationDirection"><option value="both">Subidas y bajadas</option><option value="down">Solo bajadas</option><option value="up">Solo subidas</option></select></label></div><button class="secondary-btn" id="requestNotifications" type="button">Conceder permiso</button></fieldset>
       <p id="settingsError" class="form-error" hidden></p><button class="primary-btn dialog-save" type="submit">Guardar ajustes</button>
     </form>

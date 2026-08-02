@@ -29,7 +29,6 @@ const STORAGE = {
 const DEFAULT_SETTINGS = {
   supabaseFunctionsUrl: String(RUNTIME_CONFIG.supabaseFunctionsUrl || ''),
   supabasePublishableKey: String(RUNTIME_CONFIG.supabasePublishableKey || ''),
-  appAccessToken: '',
   googleMapsKey: String(RUNTIME_CONFIG.googleMapsKey || ''),
   googleMapId: String(RUNTIME_CONFIG.googleMapId || ''),
   notificationsEnabled: false,
@@ -181,13 +180,6 @@ const el = {
   discountError: $('#discountError'),
   settingsDialog: $('#settingsDialog'),
   settingsForm: $('#settingsForm'),
-  supabaseFunctionsUrl: $('#supabaseFunctionsUrl'),
-  supabasePublishableKey: $('#supabasePublishableKey'),
-  appAccessToken: $('#appAccessToken'),
-  testServer: $('#testServer'),
-  serverStatus: $('#serverStatus'),
-  googleMapsKey: $('#googleMapsKey'),
-  googleMapId: $('#googleMapId'),
   notificationsEnabled: $('#notificationsEnabled'),
   notificationInterval: $('#notificationInterval'),
   notificationThreshold: $('#notificationThreshold'),
@@ -270,21 +262,12 @@ function isNative() {
 function loadState() {
   const savedSettings = readJSON(STORAGE.settings, {});
   state.settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-  // La configuración pública desplegada tiene prioridad cuando una versión
-  // anterior dejó campos vacíos en la caché local.
-  if (!state.settings.supabaseFunctionsUrl && RUNTIME_CONFIG.supabaseFunctionsUrl) {
-    state.settings.supabaseFunctionsUrl = String(RUNTIME_CONFIG.supabaseFunctionsUrl);
-  }
-  if (!state.settings.supabasePublishableKey && RUNTIME_CONFIG.supabasePublishableKey) {
-    state.settings.supabasePublishableKey = String(RUNTIME_CONFIG.supabasePublishableKey);
-  }
-  // Migración automática desde versiones anteriores basadas en proxy.
-  if (!state.settings.supabaseFunctionsUrl && savedSettings.proxyUrl) {
-    state.settings.supabaseFunctionsUrl = String(savedSettings.proxyUrl).replace(/\/$/, '');
-  }
-  if (!state.settings.appAccessToken && savedSettings.proxyToken) {
-    state.settings.appAccessToken = savedSettings.proxyToken;
-  }
+  // La infraestructura se configura durante el despliegue y no se solicita al usuario.
+  // Los valores de runtime siempre prevalecen sobre configuraciones antiguas en caché.
+  state.settings.supabaseFunctionsUrl = String(RUNTIME_CONFIG.supabaseFunctionsUrl || state.settings.supabaseFunctionsUrl || '').replace(/\/$/, '');
+  state.settings.supabasePublishableKey = String(RUNTIME_CONFIG.supabasePublishableKey || state.settings.supabasePublishableKey || '');
+  state.settings.googleMapsKey = String(RUNTIME_CONFIG.googleMapsKey || state.settings.googleMapsKey || '');
+  state.settings.googleMapId = String(RUNTIME_CONFIG.googleMapId || state.settings.googleMapId || '');
   state.filters = { ...DEFAULT_FILTERS, ...readJSON(STORAGE.filters, {}) };
   state.vehicles = readJSON(STORAGE.vehicles, []);
   state.selectedVehicleId = readStoredValue(STORAGE.selectedVehicle) || '';
@@ -414,12 +397,10 @@ function apiEndpoint(path, params = '') {
 function apiHeaders() {
   const headers = { Accept: 'application/json' };
   const publishable = String(state.settings.supabasePublishableKey || '').trim();
-  const accessToken = String(state.settings.appAccessToken || '').trim();
   if (publishable) {
     headers.apikey = publishable;
     headers.Authorization = `Bearer ${publishable}`;
   }
-  if (accessToken) headers['X-Combusplus-Token'] = accessToken;
   return headers;
 }
 
@@ -431,7 +412,7 @@ async function apiFetch(path, params) {
   let payload = null;
   try { payload = await response.json(); } catch { /* sin cuerpo JSON */ }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error('El servidor ha rechazado el token privado.');
+    if (response.status === 401 || response.status === 403) throw new Error('El servidor ha rechazado la solicitud.');
     throw new Error(payload?.message || payload?.error || `Error ${response.status} al consultar precios.`);
   }
   return payload;
@@ -1295,60 +1276,21 @@ function saveDiscountForm(event) {
 }
 
 function populateSettings() {
-  el.supabaseFunctionsUrl.value = state.settings.supabaseFunctionsUrl || '';
-  el.supabasePublishableKey.value = state.settings.supabasePublishableKey || '';
-  el.appAccessToken.value = state.settings.appAccessToken || '';
-  el.googleMapsKey.value = state.settings.googleMapsKey || '';
-  el.googleMapId.value = state.settings.googleMapId || '';
   el.notificationsEnabled.checked = state.settings.notificationsEnabled;
   el.notificationInterval.value = state.settings.notificationInterval;
   el.notificationThreshold.value = state.settings.notificationThreshold;
   el.notificationDirection.value = state.settings.notificationDirection;
-  el.serverStatus.textContent = 'Sin comprobar';
-  el.serverStatus.className = '';
-}
-
-async function testServerConnection() {
-  clearError(el.settingsError);
-  const previous = { ...state.settings };
-  state.settings.supabaseFunctionsUrl = el.supabaseFunctionsUrl.value.trim();
-  state.settings.supabasePublishableKey = el.supabasePublishableKey.value.trim();
-  state.settings.appAccessToken = el.appAccessToken.value.trim();
-  el.testServer.disabled = true;
-  el.serverStatus.textContent = 'Comprobando…';
-  el.serverStatus.className = '';
-  try {
-    const payload = await apiFetch('health', '');
-    if (!payload?.ok) throw new Error('Respuesta no válida del servidor.');
-    el.serverStatus.textContent = 'Servidor conectado';
-    el.serverStatus.className = 'ok';
-  } catch (error) {
-    el.serverStatus.textContent = 'Conexión fallida';
-    el.serverStatus.className = 'error';
-    showError(el.settingsError, error.message);
-  } finally {
-    state.settings = { ...previous };
-    el.testServer.disabled = false;
-  }
 }
 
 function saveSettingsForm(event) {
   event.preventDefault();
   clearError(el.settingsError);
-  const functionsUrl = el.supabaseFunctionsUrl.value.trim().replace(/\/$/, '');
-  const publishableKey = el.supabasePublishableKey.value.trim();
-  const accessToken = el.appAccessToken.value.trim();
-  if (!/^https:\/\/.+\.supabase\.co\/functions\/v1$/i.test(functionsUrl) && !/^https:\/\//i.test(functionsUrl)) {
-    return showError(el.settingsError, 'Indica una URL válida de Edge Functions.');
-  }
-  if (!publishableKey) return showError(el.settingsError, 'Indica la clave pública de Supabase.');
-  if (!accessToken) return showError(el.settingsError, 'Indica tu código personal de acceso.');
   state.settings = {
-    supabaseFunctionsUrl: functionsUrl,
-    supabasePublishableKey: publishableKey,
-    appAccessToken: accessToken,
-    googleMapsKey: el.googleMapsKey.value.trim(),
-    googleMapId: el.googleMapId.value.trim(),
+    ...state.settings,
+    supabaseFunctionsUrl: String(RUNTIME_CONFIG.supabaseFunctionsUrl || state.settings.supabaseFunctionsUrl || '').replace(/\/$/, ''),
+    supabasePublishableKey: String(RUNTIME_CONFIG.supabasePublishableKey || state.settings.supabasePublishableKey || ''),
+    googleMapsKey: String(RUNTIME_CONFIG.googleMapsKey || state.settings.googleMapsKey || ''),
+    googleMapId: String(RUNTIME_CONFIG.googleMapId || state.settings.googleMapId || ''),
     notificationsEnabled: el.notificationsEnabled.checked,
     notificationInterval: Number(el.notificationInterval.value),
     notificationThreshold: Number(el.notificationThreshold.value),
@@ -1357,7 +1299,7 @@ function saveSettingsForm(event) {
   saveSettings();
   closeDialog(el.settingsDialog);
   state.mapsPromise = null;
-  toast('Ajustes guardados de forma local');
+  toast('Preferencias guardadas');
 }
 
 async function requestNotificationPermission() {
@@ -1382,7 +1324,6 @@ function syncNativeConfig() {
     direction: state.settings.notificationDirection,
     supabaseFunctionsUrl: state.settings.supabaseFunctionsUrl,
     supabasePublishableKey: state.settings.supabasePublishableKey,
-    appAccessToken: state.settings.appAccessToken,
     selectedVehicleId: state.selectedVehicleId,
     vehicles: state.vehicles,
     favorites: state.favorites.map(favorite => ({
@@ -1429,7 +1370,7 @@ function exportData() {
     favorites: state.favorites,
     discounts: state.discounts,
     history: state.history,
-    settings: { ...state.settings, appAccessToken: '', supabasePublishableKey: '', googleMapsKey: '' }
+    settings: { ...state.settings, supabasePublishableKey: '', googleMapsKey: '' }
   }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -1522,7 +1463,6 @@ function bind() {
   el.vehicleForm.addEventListener('submit', saveVehicleForm);
   el.discountForm.addEventListener('submit', saveDiscountForm);
   el.settingsForm.addEventListener('submit', saveSettingsForm);
-  el.testServer?.addEventListener('click', testServerConnection);
   el.requestNotifications.addEventListener('click', requestNotificationPermission);
 }
 
@@ -1555,8 +1495,8 @@ function init() {
   syncNativeConfig();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   setTimeout(() => checkFavoritePrices(true), 1200);
-  if (!state.settings.supabaseFunctionsUrl || !state.settings.supabasePublishableKey || !state.settings.appAccessToken) {
-    setTimeout(() => { populateSettings(); openDialog(el.settingsDialog); }, 450);
+  if (!state.settings.supabaseFunctionsUrl || !state.settings.supabasePublishableKey) {
+    console.error('Combusplus no tiene configurado el backend público de Supabase.');
   }
   try {
     if (window.AndroidBridge?.consumeFullTankLaunch?.()) {

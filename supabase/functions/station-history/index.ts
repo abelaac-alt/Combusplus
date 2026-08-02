@@ -1,4 +1,4 @@
-import { clientIdentity, jsonResponse, preflight, requireAppToken, safeError } from '../_shared/security.ts';
+import { clientIdentity, jsonResponse, preflight, safeError } from '../_shared/security.ts';
 import { enforceRateLimit, stationHistory } from '../_shared/database.ts';
 
 Deno.serve(async (req) => {
@@ -6,8 +6,6 @@ Deno.serve(async (req) => {
   if (options) return options;
   if (req.method !== 'GET') return jsonResponse(req, { ok: false, error: 'Método no permitido.' }, 405);
 
-  const authError = requireAppToken(req);
-  if (authError) return authError;
 
   try {
     const allowed = await enforceRateLimit(`${clientIdentity(req)}:history`, 60);
