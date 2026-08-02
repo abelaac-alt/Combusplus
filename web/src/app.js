@@ -78,8 +78,12 @@ const el = {
   quickSearchForm: $('#quickSearchForm'),
   quickVehicle: $('#quickVehicle'),
   quickConsumption: $('#quickConsumption'),
+  quickTankCapacity: $('#quickTankCapacity'),
   quickFuel: $('#quickFuel'),
   quickAmount: $('#quickAmount'),
+  quickAmountField: $('#quickAmountField'),
+  quickTankSummary: $('#quickTankSummary'),
+  quickTankSummaryValue: $('#quickTankSummaryValue'),
   quickRadius: $('#quickRadius'),
   manualVehicleFields: $('#manualVehicleFields'),
   quickSearchError: $('#quickSearchError'),
@@ -324,6 +328,7 @@ function applyVehicleToSearch() {
     state.selectedVehicleId = vehicle.id;
     writeStoredValue(STORAGE.selectedVehicle, vehicle.id);
     el.quickConsumption.value = vehicle.consumption;
+    el.quickTankCapacity.value = vehicle.tank || 50;
     el.quickFuel.value = vehicle.fuelKey;
     el.listFuel.value = vehicle.fuelKey;
     state.filters.fuelKey = vehicle.fuelKey;
@@ -333,21 +338,42 @@ function applyVehicleToSearch() {
     removeStoredValue(STORAGE.selectedVehicle);
   }
   saveFilters();
+  updateSearchModeUi();
   syncNativeConfig();
+}
+
+function selectedSearchMode() {
+  return $('input[name="searchMode"]:checked')?.value || 'amount';
+}
+
+function updateSearchModeUi() {
+  const fullTank = selectedSearchMode() === 'fullTank';
+  const vehicle = state.vehicles.find(item => item.id === el.quickVehicle.value) || null;
+  const capacity = Number(vehicle?.tank ?? el.quickTankCapacity?.value ?? 50);
+  if (el.quickAmountField) el.quickAmountField.hidden = fullTank;
+  if (el.quickTankSummary) el.quickTankSummary.hidden = !fullTank;
+  if (el.quickTankSummaryValue) el.quickTankSummaryValue.textContent = `${Number.isFinite(capacity) ? num(capacity, 0) : '—'} litros`;
+  if (el.quickSearchButton) {
+    const label = el.quickSearchButton.querySelector('span');
+    if (label) label.textContent = fullTank ? 'Encontrar dónde llenar el depósito' : 'Encontrar la gasolinera más barata';
+  }
 }
 
 function currentSearchInput() {
   const vehicle = state.vehicles.find(item => item.id === el.quickVehicle.value) || null;
   const selectedTrip = $('input[name="quickTrip"]:checked')?.value || 'roundtrip';
+  const fullTank = selectedSearchMode() === 'fullTank';
   return {
     vehicle,
     vehicleId: vehicle?.id || '',
     fuelKey: vehicle?.fuelKey || el.quickFuel.value,
     consumption: Number(vehicle?.consumption ?? el.quickConsumption.value),
+    tankCapacity: Number(vehicle?.tank ?? el.quickTankCapacity?.value),
     amount: Number(el.quickAmount.value),
     radius: Number(el.quickRadius.value),
     tripMode: selectedTrip,
-    discounts: state.discounts
+    discounts: state.discounts,
+    fullTank
   };
 }
 
@@ -439,6 +465,7 @@ async function requestPosition(force = false) {
     longitude: position.coords.longitude,
     accuracy: position.coords.accuracy
   };
+  try { window.AndroidBridge?.saveLastLocation?.(state.position.latitude, state.position.longitude); } catch { /* no nativo */ }
   el.locationStatus.textContent = `Ubicación activa · precisión ${Math.round(position.coords.accuracy)} m`;
   return state.position;
 }
@@ -510,7 +537,11 @@ function filteredStations() {
 
 function validateSearch(input) {
   if (!Number.isFinite(input.consumption) || input.consumption < 1 || input.consumption > 30) return 'Indica un consumo entre 1 y 30 l/100 km.';
-  if (!Number.isFinite(input.amount) || input.amount < 5 || input.amount > 500) return 'Indica un importe entre 5 € y 500 €.';
+  if (input.fullTank) {
+    if (!Number.isFinite(input.tankCapacity) || input.tankCapacity < 10 || input.tankCapacity > 200) return 'Indica una capacidad de depósito entre 10 y 200 litros.';
+  } else if (!Number.isFinite(input.amount) || input.amount < 5 || input.amount > 500) {
+    return 'Indica un importe entre 5 € y 500 €.';
+  }
   if (!Number.isFinite(input.radius) || input.radius < 1 || input.radius > 50) return 'Indica un radio entre 1 y 50 km.';
   return '';
 }
@@ -524,22 +555,24 @@ async function executeSearch(event) {
 
   syncSearchControls(input);
   el.quickSearchButton.disabled = true;
-  el.quickSearchButton.querySelector('span').textContent = 'Buscando la mejor opción…';
+  el.quickSearchButton.querySelector('span').textContent = input.fullTank ? 'Calculando el depósito completo…' : 'Buscando la mejor opción…';
   el.stationList.innerHTML = '<div class="loading">Comparando precios y distancias…</div>';
   el.bestResult.hidden = true;
 
   try {
     await fetchStations(input.radius);
-    const ranked = rankNormalizedStations(state.stations, input);
+    const ranked = input.fullTank ? rankFullTankStations(state.stations, input) : rankNormalizedStations(state.stations, input);
     if (!ranked.length) throw new Error('No hay gasolineras con precio para este combustible dentro del radio seleccionado.');
     const best = ranked[0];
     const nearest = [...ranked].sort((a, b) => a.distanceKm - b.distanceKm)[0];
     const saving = equivalentSaving(best, nearest);
+    if (input.fullTank) input.amount = best.tankCost;
     state.currentSimulation = {
       best,
       nearest,
       saving,
       input,
+      mode: input.fullTank ? 'fullTank' : 'amount',
       radius: input.radius,
       vehicleId: input.vehicleId,
       registered: false
@@ -554,7 +587,7 @@ async function executeSearch(event) {
     showError(el.quickSearchError, searchError.message);
   } finally {
     el.quickSearchButton.disabled = false;
-    el.quickSearchButton.querySelector('span').textContent = 'Encontrar la gasolinera más barata';
+    updateSearchModeUi();
   }
 }
 
@@ -1033,19 +1066,69 @@ function mapStations() {
 }
 
 function loadGoogleMaps() {
-  if (window.google?.maps) return Promise.resolve(window.google.maps);
+  if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
   if (state.mapsPromise) return state.mapsPromise;
-  if (!state.settings.googleMapsKey) return Promise.reject(new Error('Configura la clave de Google Maps.'));
+  const apiKey = String(state.settings.googleMapsKey || '').trim();
+  if (!apiKey) return Promise.reject(new Error('Google Maps no está configurado. Se mostrará el mapa alternativo.'));
+
   state.mapsPromise = new Promise((resolve, reject) => {
-    const callback = `cb_${Date.now()}`;
-    window[callback] = () => { delete window[callback]; resolve(window.google.maps); };
+    const callback = `combusplusMapsReady_${Date.now()}`;
+    const previousAuthFailure = window.gm_authFailure;
+    let finished = false;
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      try { delete window[callback]; } catch { window[callback] = undefined; }
+      window.gm_authFailure = previousAuthFailure;
+      if (error) {
+        state.mapsPromise = null;
+        reject(error);
+      } else {
+        resolve(window.google.maps);
+      }
+    };
+    window[callback] = () => finish(null);
+    window.gm_authFailure = () => finish(new Error('Google Maps ha rechazado la clave o sus restricciones. Se mostrará el mapa alternativo.'));
+
     const script = document.createElement('script');
+    script.id = 'combusplus-google-maps';
     script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(state.settings.googleMapsKey)}&loading=async&callback=${callback}&language=es&region=ES${state.settings.googleMapId ? `&map_ids=${encodeURIComponent(state.settings.googleMapId)}` : ''}`;
-    script.onerror = () => reject(new Error('No se pudo cargar Google Maps.'));
+    script.defer = true;
+    const query = new URLSearchParams({
+      key: apiKey,
+      callback,
+      language: 'es',
+      region: 'ES',
+      v: 'weekly',
+      loading: 'async'
+    });
+    script.src = `https://maps.googleapis.com/maps/api/js?${query.toString()}`;
+    script.onerror = () => finish(new Error('No se pudo descargar Google Maps. Se mostrará el mapa alternativo.'));
     document.head.appendChild(script);
+    const timeout = setTimeout(() => finish(new Error('Google Maps ha tardado demasiado. Se mostrará el mapa alternativo.')), 12000);
   });
   return state.mapsPromise;
+}
+
+function renderOpenStreetMapFallback(items, cause = '') {
+  const station = state.currentSimulation?.best || items[0];
+  el.googleMap.innerHTML = '';
+  if (!station || !Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
+    el.googleMap.appendChild(emptyState(cause || 'No hay una ubicación válida para mostrar el mapa.'));
+    return;
+  }
+  const lat = station.latitude;
+  const lon = station.longitude;
+  const deltaLat = 0.06;
+  const deltaLon = 0.09;
+  const bbox = [lon - deltaLon, lat - deltaLat, lon + deltaLon, lat + deltaLat].join(',');
+  const frameUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}`;
+  const route = mapsUrl(station);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'map-fallback';
+  wrapper.innerHTML = `<iframe title="Mapa de ${escapeHtml(station.name)}" loading="lazy" referrerpolicy="no-referrer" src="${frameUrl}"></iframe><div class="map-fallback-note"><span>${escapeHtml(cause || 'Mapa alternativo activo')} · Marcador en ${escapeHtml(station.name)}</span><a href="${route}" target="_blank" rel="noopener noreferrer">Abrir ruta</a></div>`;
+  el.googleMap.appendChild(wrapper);
 }
 
 async function renderMap() {
@@ -1054,23 +1137,26 @@ async function renderMap() {
     el.googleMap.appendChild(emptyState('Realiza una búsqueda desde la pestaña Buscar.'));
     return;
   }
+  const items = mapStations();
   try {
     const maps = await loadGoogleMaps();
-    const center = state.position ? { lat: state.position.latitude, lng: state.position.longitude } : { lat: 40.4168, lng: -3.7038 };
+    const center = state.position ? { lat: state.position.latitude, lng: state.position.longitude } : { lat: items[0]?.latitude || 40.4168, lng: items[0]?.longitude || -3.7038 };
     if (!state.map) {
-      state.map = new maps.Map(el.googleMap, {
+      const mapOptions = {
         center,
         zoom: 12,
-        mapId: state.settings.googleMapId || undefined,
         streetViewControl: false,
         mapTypeControl: false,
-        fullscreenControl: true
-      });
+        fullscreenControl: true,
+        gestureHandling: 'greedy'
+      };
+      const mapId = String(state.settings.googleMapId || '').trim();
+      if (mapId && mapId !== 'DEMO_MAP_ID') mapOptions.mapId = mapId;
+      state.map = new maps.Map(el.googleMap, mapOptions);
     }
     state.map.setCenter(center);
-    state.markers.forEach(marker => marker.setMap(null));
+    state.markers.forEach(marker => marker.setMap?.(null));
     state.markers = [];
-    const items = mapStations();
     for (const station of items) {
       if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) continue;
       const marker = new maps.Marker({
@@ -1093,8 +1179,9 @@ async function renderMap() {
     el.mapModeLabel.textContent = state.filters.mapMode === 'top10' ? '10 más baratas' : `${items.length} gasolineras`;
     renderMapPreview();
   } catch (error) {
-    el.googleMap.innerHTML = '';
-    el.googleMap.appendChild(emptyState(error.message));
+    renderOpenStreetMapFallback(items, error.message);
+    el.mapModeLabel.textContent = `${items.length} gasolineras · mapa alternativo`;
+    renderMapPreview();
   }
 }
 
@@ -1212,6 +1299,7 @@ function saveVehicleForm(event) {
     fuelKey: el.vehicleFuel.value
   };
   if (!vehicle.name) return showError(el.vehicleError, 'Indica un nombre.');
+  if (!Number.isFinite(vehicle.tank) || vehicle.tank < 10 || vehicle.tank > 200) return showError(el.vehicleError, 'Indica un depósito entre 10 y 200 litros.');
   if (!Number.isFinite(vehicle.consumption) || vehicle.consumption < 1 || vehicle.consumption > 30) return showError(el.vehicleError, 'Consumo no válido.');
   const index = state.vehicles.findIndex(item => item.id === vehicle.id);
   if (index >= 0) state.vehicles[index] = vehicle;
@@ -1389,6 +1477,8 @@ function bind() {
   el.openSettings.addEventListener('click', () => { populateSettings(); openDialog(el.settingsDialog); });
   el.quickSearchForm.addEventListener('submit', executeSearch);
   el.quickVehicle.addEventListener('change', applyVehicleToSearch);
+  $$('input[name="searchMode"]').forEach(input => input.addEventListener('change', updateSearchModeUi));
+  el.quickTankCapacity?.addEventListener('input', updateSearchModeUi);
   el.quickFuel.addEventListener('change', () => { state.filters.fuelKey = el.quickFuel.value; el.listFuel.value = el.quickFuel.value; saveFilters(); });
   el.quickAmount.addEventListener('change', () => { state.filters.amount = Number(el.quickAmount.value); saveFilters(); });
   el.quickRadius.addEventListener('change', () => { state.filters.radius = Number(el.quickRadius.value); el.listRadius.value = el.quickRadius.value; saveFilters(); });
@@ -1405,7 +1495,7 @@ function bind() {
       el.refreshFavoriteWidget.disabled = false;
     }
   });
-  el.fullTankButton?.addEventListener('click', () => runFullTankSearch({ openRoute: true }));
+  el.fullTankButton?.addEventListener('click', () => runFullTankSearch({ openRoute: false }));
 
   el.bestFavorite.addEventListener('click', () => state.currentSimulation && toggleFavorite(state.currentSimulation.best));
   el.bestDetails.addEventListener('click', () => state.currentSimulation && openStationDetail(state.currentSimulation.best));
@@ -1418,7 +1508,7 @@ function bind() {
   el.listSort.addEventListener('change', () => { state.filters.sort = el.listSort.value; saveFilters(); renderStations(); });
 
   el.refreshMap.addEventListener('click', async () => { await searchStations(); navigate('map'); });
-  el.configureMap.addEventListener('click', () => { populateSettings(); openDialog(el.settingsDialog); });
+  el.configureMap.addEventListener('click', () => renderMap());
   el.mapTopTenToggle.addEventListener('click', () => {
     state.filters.mapMode = state.filters.mapMode === 'top10' ? 'all' : 'top10';
     el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));
@@ -1475,6 +1565,7 @@ function init() {
 
   el.quickFuel.value = state.filters.fuelKey;
   el.quickConsumption.value = state.filters.consumption;
+  el.quickTankCapacity.value = activeVehicle()?.tank || 50;
   el.quickAmount.value = state.filters.amount;
   el.quickRadius.value = state.filters.radius;
   const trip = $(`input[name="quickTrip"][value="${state.filters.tripMode}"]`);
@@ -1490,6 +1581,7 @@ function init() {
   renderStats();
   populateFilters();
   bind();
+  updateSearchModeUi();
   navigate(location.hash.slice(1) || 'list');
   window.addEventListener('hashchange', () => navigate(location.hash.slice(1) || 'list'));
   syncNativeConfig();
@@ -1500,7 +1592,7 @@ function init() {
   }
   try {
     if (window.AndroidBridge?.consumeFullTankLaunch?.()) {
-      setTimeout(() => runFullTankSearch({ openRoute: true }), 900);
+      setTimeout(() => runFullTankSearch({ openRoute: false }), 900);
     }
   } catch { /* no es la aplicación Android */ }
 }

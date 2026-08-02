@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(false);
         settings.setLoadWithOverviewMode(false);
         settings.setTextZoom(100);
-        settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/7.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/7.2");
 
         webView.addJavascriptInterface(webBridge, "AndroidBridge");
         webView.setWebChromeClient(new android.webkit.WebChromeClient() {

@@ -173,3 +173,14 @@ html,body,.app-shell,main,.page{overscroll-behavior-x:none;touch-action:pan-y}
 @supports (height: 100svh){
   .dialog-panel,.station-detail{max-height:calc(100svh - var(--safe-top) - var(--safe-bottom) - 12px)}
 }
+
+/* Actualización 7.2: búsqueda por depósito lleno y mapa con fallback. */
+.search-mode-segment{margin-bottom:12px}
+.tank-search-summary{border:1px solid var(--line);background:var(--surface-2);padding:10px 12px;min-height:64px;display:flex;flex-direction:column;justify-content:center}
+.tank-search-summary strong{font-size:18px;color:var(--ink);margin-top:2px}
+.tank-search-summary small{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.35}
+.map-fallback{width:100%;height:100%;position:relative;background:#e7eaee}
+.map-fallback iframe{width:100%;height:100%;border:0;display:block}
+.map-fallback-note{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(17,18,20,.92);color:#fff;padding:8px 10px;font-size:10px;line-height:1.35;z-index:2;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.map-fallback-note a{color:#fff;text-decoration:underline;font-weight:700;white-space:nowrap}
+@media(max-width:520px){.map-fallback-note{align-items:flex-start;flex-direction:column}.map-fallback-note a{white-space:normal}}
