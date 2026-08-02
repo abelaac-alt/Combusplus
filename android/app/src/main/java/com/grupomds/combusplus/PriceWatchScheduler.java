@@ -1,7 +1,6 @@
 package com.grupomds.combusplus;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 
 import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
@@ -21,14 +20,13 @@ public final class PriceWatchScheduler {
     private PriceWatchScheduler() {}
 
     public static void saveAndSchedule(Context context, String json) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(CONFIG, json).apply();
-        schedule(context, json);
+        SecureLocalStore.putString(context, CONFIG, json == null ? "" : json);
+        schedule(context, json == null ? "" : json);
         AppWidgetUpdater.updateAll(context);
     }
 
     public static void restore(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        String json = prefs.getString(CONFIG, "");
+        String json = SecureLocalStore.getString(context, CONFIG, "");
         if (!json.trim().isEmpty()) schedule(context, json);
     }
 
@@ -41,10 +39,14 @@ public final class PriceWatchScheduler {
                 return;
             }
             long hours = Math.max(1, config.optLong("intervalHours", 6));
-            Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
-            PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(PriceWatchWorker.class, hours, TimeUnit.HOURS)
-                    .setConstraints(constraints)
+            Constraints constraints = new Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build();
+            PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(
+                    PriceWatchWorker.class,
+                    hours,
+                    TimeUnit.HOURS
+            ).setConstraints(constraints).build();
             manager.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);
         } catch (Exception ignored) {
         }

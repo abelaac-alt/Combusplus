@@ -23,13 +23,15 @@ const STORAGE = {
   discounts: 'combusplus.v5.discounts',
   history: 'combusplus.v5.history',
   snapshots: 'combusplus.v5.snapshots',
-  filters: 'combusplus.v5.filters'
+  filters: 'combusplus.v5.filters',
+  installationId: 'combusplus.v8.installationId',
+  sessionToken: 'combusplus.v8.sessionToken',
+  sessionExpiresAt: 'combusplus.v8.sessionExpiresAt'
 };
 
 const DEFAULT_SETTINGS = {
   supabaseFunctionsUrl: String(RUNTIME_CONFIG.supabaseFunctionsUrl || ''),
   supabasePublishableKey: String(RUNTIME_CONFIG.supabasePublishableKey || ''),
-  appAccessToken: '',
   googleMapsKey: String(RUNTIME_CONFIG.googleMapsKey || ''),
   googleMapId: String(RUNTIME_CONFIG.googleMapId || ''),
   notificationsEnabled: false,
@@ -65,7 +67,12 @@ const state = {
   currentSimulation: null,
   map: null,
   markers: [],
-  mapsPromise: null
+  mapsPromise: null,
+  backendSession: {
+    token: '',
+    expiresAt: 0,
+    promise: null
+  }
 };
 
 const $ = selector => document.querySelector(selector);
@@ -79,8 +86,12 @@ const el = {
   quickSearchForm: $('#quickSearchForm'),
   quickVehicle: $('#quickVehicle'),
   quickConsumption: $('#quickConsumption'),
+  quickTankCapacity: $('#quickTankCapacity'),
   quickFuel: $('#quickFuel'),
   quickAmount: $('#quickAmount'),
+  quickAmountField: $('#quickAmountField'),
+  quickTankSummary: $('#quickTankSummary'),
+  quickTankSummaryValue: $('#quickTankSummaryValue'),
   quickRadius: $('#quickRadius'),
   manualVehicleFields: $('#manualVehicleFields'),
   quickSearchError: $('#quickSearchError'),
@@ -98,6 +109,22 @@ const el = {
   bestPrice: $('#bestPrice'),
   bestDistance: $('#bestDistance'),
   bestNetLiters: $('#bestNetLiters'),
+  bestRefuelCost: $('#bestRefuelCost'),
+
+  comparisonDialog: $('#comparisonDialog'),
+  compareBestName: $('#compareBestName'),
+  compareBestPrice: $('#compareBestPrice'),
+  compareBestTrip: $('#compareBestTrip'),
+  compareBestTripFuel: $('#compareBestTripFuel'),
+  compareBestCost: $('#compareBestCost'),
+  compareSelectedName: $('#compareSelectedName'),
+  compareSelectedPrice: $('#compareSelectedPrice'),
+  compareSelectedTrip: $('#compareSelectedTrip'),
+  compareSelectedTripFuel: $('#compareSelectedTripFuel'),
+  compareSelectedCost: $('#compareSelectedCost'),
+  compareSaving: $('#compareSaving'),
+  compareSavingCopy: $('#compareSavingCopy'),
+  compareBestRoute: $('#compareBestRoute'),
   bestSaving: $('#bestSaving'),
   bestSavingCopy: $('#bestSavingCopy'),
   bestRoute: $('#bestRoute'),
@@ -181,13 +208,6 @@ const el = {
   discountError: $('#discountError'),
   settingsDialog: $('#settingsDialog'),
   settingsForm: $('#settingsForm'),
-  supabaseFunctionsUrl: $('#supabaseFunctionsUrl'),
-  supabasePublishableKey: $('#supabasePublishableKey'),
-  appAccessToken: $('#appAccessToken'),
-  testServer: $('#testServer'),
-  serverStatus: $('#serverStatus'),
-  googleMapsKey: $('#googleMapsKey'),
-  googleMapId: $('#googleMapId'),
   notificationsEnabled: $('#notificationsEnabled'),
   notificationInterval: $('#notificationInterval'),
   notificationThreshold: $('#notificationThreshold'),
@@ -270,21 +290,12 @@ function isNative() {
 function loadState() {
   const savedSettings = readJSON(STORAGE.settings, {});
   state.settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-  // La configuración pública desplegada tiene prioridad cuando una versión
-  // anterior dejó campos vacíos en la caché local.
-  if (!state.settings.supabaseFunctionsUrl && RUNTIME_CONFIG.supabaseFunctionsUrl) {
-    state.settings.supabaseFunctionsUrl = String(RUNTIME_CONFIG.supabaseFunctionsUrl);
-  }
-  if (!state.settings.supabasePublishableKey && RUNTIME_CONFIG.supabasePublishableKey) {
-    state.settings.supabasePublishableKey = String(RUNTIME_CONFIG.supabasePublishableKey);
-  }
-  // Migración automática desde versiones anteriores basadas en proxy.
-  if (!state.settings.supabaseFunctionsUrl && savedSettings.proxyUrl) {
-    state.settings.supabaseFunctionsUrl = String(savedSettings.proxyUrl).replace(/\/$/, '');
-  }
-  if (!state.settings.appAccessToken && savedSettings.proxyToken) {
-    state.settings.appAccessToken = savedSettings.proxyToken;
-  }
+  // La infraestructura se configura durante el despliegue y no se solicita al usuario.
+  // Los valores de runtime siempre prevalecen sobre configuraciones antiguas en caché.
+  state.settings.supabaseFunctionsUrl = String(RUNTIME_CONFIG.supabaseFunctionsUrl || state.settings.supabaseFunctionsUrl || '').replace(/\/$/, '');
+  state.settings.supabasePublishableKey = String(RUNTIME_CONFIG.supabasePublishableKey || state.settings.supabasePublishableKey || '');
+  state.settings.googleMapsKey = String(RUNTIME_CONFIG.googleMapsKey || state.settings.googleMapsKey || '');
+  state.settings.googleMapId = String(RUNTIME_CONFIG.googleMapId || state.settings.googleMapId || '');
   state.filters = { ...DEFAULT_FILTERS, ...readJSON(STORAGE.filters, {}) };
   state.vehicles = readJSON(STORAGE.vehicles, []);
   state.selectedVehicleId = readStoredValue(STORAGE.selectedVehicle) || '';
@@ -341,6 +352,7 @@ function applyVehicleToSearch() {
     state.selectedVehicleId = vehicle.id;
     writeStoredValue(STORAGE.selectedVehicle, vehicle.id);
     el.quickConsumption.value = vehicle.consumption;
+    el.quickTankCapacity.value = vehicle.tank || 50;
     el.quickFuel.value = vehicle.fuelKey;
     el.listFuel.value = vehicle.fuelKey;
     state.filters.fuelKey = vehicle.fuelKey;
@@ -350,21 +362,42 @@ function applyVehicleToSearch() {
     removeStoredValue(STORAGE.selectedVehicle);
   }
   saveFilters();
+  updateSearchModeUi();
   syncNativeConfig();
+}
+
+function selectedSearchMode() {
+  return $('input[name="searchMode"]:checked')?.value || 'amount';
+}
+
+function updateSearchModeUi() {
+  const fullTank = selectedSearchMode() === 'fullTank';
+  const vehicle = state.vehicles.find(item => item.id === el.quickVehicle.value) || null;
+  const capacity = Number(vehicle?.tank ?? el.quickTankCapacity?.value ?? 50);
+  if (el.quickAmountField) el.quickAmountField.hidden = fullTank;
+  if (el.quickTankSummary) el.quickTankSummary.hidden = !fullTank;
+  if (el.quickTankSummaryValue) el.quickTankSummaryValue.textContent = `${Number.isFinite(capacity) ? num(capacity, 0) : '—'} litros`;
+  if (el.quickSearchButton) {
+    const label = el.quickSearchButton.querySelector('span');
+    if (label) label.textContent = fullTank ? 'Encontrar dónde llenar el depósito' : 'Encontrar la gasolinera más barata';
+  }
 }
 
 function currentSearchInput() {
   const vehicle = state.vehicles.find(item => item.id === el.quickVehicle.value) || null;
   const selectedTrip = $('input[name="quickTrip"]:checked')?.value || 'roundtrip';
+  const fullTank = selectedSearchMode() === 'fullTank';
   return {
     vehicle,
     vehicleId: vehicle?.id || '',
     fuelKey: vehicle?.fuelKey || el.quickFuel.value,
     consumption: Number(vehicle?.consumption ?? el.quickConsumption.value),
+    tankCapacity: Number(vehicle?.tank ?? el.quickTankCapacity?.value),
     amount: Number(el.quickAmount.value),
     radius: Number(el.quickRadius.value),
     tripMode: selectedTrip,
-    discounts: state.discounts
+    discounts: state.discounts,
+    fullTank
   };
 }
 
@@ -403,7 +436,7 @@ function closeDialog(dialog) {
 
 function apiEndpoint(path, params = '') {
   const base = String(state.settings.supabaseFunctionsUrl || '').replace(/\/$/, '');
-  if (!base) throw new Error('Configura la URL del servidor Supabase.');
+  if (!base) throw new Error('El servidor de Combusplus no está configurado.');
   const functionName = path.includes('estaciones') || path.includes('stations-nearby')
     ? 'stations-nearby'
     : path.replace(/^\//, '');
@@ -411,27 +444,164 @@ function apiEndpoint(path, params = '') {
   return `${base}/${functionName}${query ? `?${query}` : ''}`;
 }
 
-function apiHeaders() {
-  const headers = { Accept: 'application/json' };
-  const publishable = String(state.settings.supabasePublishableKey || '').trim();
-  const accessToken = String(state.settings.appAccessToken || '').trim();
-  if (publishable) {
-    headers.apikey = publishable;
-    headers.Authorization = `Bearer ${publishable}`;
+function randomInstallationId() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function installationId() {
+  let value = readStoredValue(STORAGE.installationId) || '';
+  if (!/^[A-Za-z0-9_-]{32,160}$/.test(value)) {
+    value = randomInstallationId();
+    writeStoredValue(STORAGE.installationId, value);
   }
-  if (accessToken) headers['X-Combusplus-Token'] = accessToken;
+  return value;
+}
+
+async function sha256Base64Url(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  const bytes = new Uint8Array(digest);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+const nativeIntegrityCallbacks = new Map();
+window.CombusplusNative = window.CombusplusNative || {};
+window.CombusplusNative.resolveIntegrity = (requestId, token, error) => {
+  const callback = nativeIntegrityCallbacks.get(String(requestId));
+  if (!callback) return;
+  nativeIntegrityCallbacks.delete(String(requestId));
+  if (error) callback.reject(new Error(String(error)));
+  else callback.resolve(String(token || ''));
+};
+
+function requestNativeIntegrityToken(requestHash) {
+  if (!isNative() || !window.AndroidBridge?.requestIntegrityToken) return Promise.resolve('');
+  const requestId = uid('integrity');
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      nativeIntegrityCallbacks.delete(requestId);
+      resolve('');
+    }, 20_000);
+    nativeIntegrityCallbacks.set(requestId, {
+      resolve: value => { clearTimeout(timeout); resolve(value); },
+      reject: error => { clearTimeout(timeout); reject(error); }
+    });
+    try { window.AndroidBridge.requestIntegrityToken(requestId, requestHash); }
+    catch (error) {
+      clearTimeout(timeout);
+      nativeIntegrityCallbacks.delete(requestId);
+      resolve('');
+    }
+  });
+}
+
+function clearBackendSession() {
+  state.backendSession.token = '';
+  state.backendSession.expiresAt = 0;
+  removeStoredValue(STORAGE.sessionToken);
+  removeStoredValue(STORAGE.sessionExpiresAt);
+}
+
+async function ensureBackendSession(force = false) {
+  const now = Date.now();
+  const storedToken = readStoredValue(STORAGE.sessionToken) || '';
+  const storedExpiry = Number(readStoredValue(STORAGE.sessionExpiresAt) || 0);
+  if (!force && storedToken && storedExpiry > now + 5 * 60_000) {
+    state.backendSession.token = storedToken;
+    state.backendSession.expiresAt = storedExpiry;
+    return storedToken;
+  }
+  if (!force && state.backendSession.promise) return state.backendSession.promise;
+
+  state.backendSession.promise = (async () => {
+    const id = installationId();
+    const platform = isNative() ? 'android' : 'web';
+    const requestHash = await sha256Base64Url(`${id}|${platform}|${Math.floor(Date.now() / 300000)}`);
+    let integrityToken = '';
+    try { integrityToken = await requestNativeIntegrityToken(requestHash); }
+    catch { integrityToken = ''; }
+
+    const url = apiEndpoint('bootstrap');
+    const publishable = String(state.settings.supabasePublishableKey || '').trim();
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(publishable ? { apikey: publishable } : {})
+        },
+        body: JSON.stringify({
+          installationId: id,
+          platform,
+          appVersion: String(RUNTIME_CONFIG.version || '8.0.0'),
+          requestHash,
+          integrityToken: integrityToken || undefined
+        })
+      });
+    } catch {
+      throw new Error('No se pudo iniciar una sesión segura con Combusplus.');
+    }
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.sessionToken) {
+      throw new Error(payload?.error || 'El servidor no pudo autorizar esta instalación.');
+    }
+    const expiresAt = Date.parse(payload.expiresAt || '') || Date.now() + 24 * 60 * 60_000;
+    state.backendSession.token = payload.sessionToken;
+    state.backendSession.expiresAt = expiresAt;
+    writeStoredValue(STORAGE.sessionToken, payload.sessionToken);
+    writeStoredValue(STORAGE.sessionExpiresAt, String(expiresAt));
+    return payload.sessionToken;
+  })();
+
+  try { return await state.backendSession.promise; }
+  finally { state.backendSession.promise = null; }
+}
+
+async function apiHeaders() {
+  const sessionToken = await ensureBackendSession();
+  const headers = {
+    Accept: 'application/json',
+    'X-Combusplus-Session': sessionToken,
+    'X-Installation-Id': installationId()
+  };
+  const publishable = String(state.settings.supabasePublishableKey || '').trim();
+  if (publishable) headers.apikey = publishable;
   return headers;
 }
 
-async function apiFetch(path, params) {
+async function apiFetch(path, params = '', options = {}, retry = true) {
   const url = apiEndpoint(path, params);
+  const method = String(options.method || 'GET').toUpperCase();
+  const headers = await apiHeaders();
+  if (method !== 'GET') headers['Content-Type'] = 'application/json';
   let response;
-  try { response = await fetch(url, { headers: apiHeaders(), cache: 'no-store' }); }
-  catch { throw new Error('No se pudo conectar con el servidor seguro de precios.'); }
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      cache: 'no-store',
+      body: method === 'GET' ? undefined : JSON.stringify(options.body || {})
+    });
+  } catch {
+    throw new Error('No se pudo conectar con el servidor seguro de precios.');
+  }
   let payload = null;
   try { payload = await response.json(); } catch { /* sin cuerpo JSON */ }
+  if (response.status === 401 && retry) {
+    clearBackendSession();
+    await ensureBackendSession(true);
+    return apiFetch(path, params, options, false);
+  }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error('El servidor ha rechazado el token privado.');
+    if (response.status === 401 || response.status === 403) throw new Error(payload?.error || 'El servidor ha rechazado la solicitud.');
     throw new Error(payload?.message || payload?.error || `Error ${response.status} al consultar precios.`);
   }
   return payload;
@@ -458,6 +628,7 @@ async function requestPosition(force = false) {
     longitude: position.coords.longitude,
     accuracy: position.coords.accuracy
   };
+  try { window.AndroidBridge?.saveLastLocation?.(state.position.latitude, state.position.longitude); } catch { /* no nativo */ }
   el.locationStatus.textContent = `Ubicación activa · precisión ${Math.round(position.coords.accuracy)} m`;
   return state.position;
 }
@@ -529,9 +700,43 @@ function filteredStations() {
 
 function validateSearch(input) {
   if (!Number.isFinite(input.consumption) || input.consumption < 1 || input.consumption > 30) return 'Indica un consumo entre 1 y 30 l/100 km.';
-  if (!Number.isFinite(input.amount) || input.amount < 5 || input.amount > 500) return 'Indica un importe entre 5 € y 500 €.';
+  if (input.fullTank) {
+    if (!Number.isFinite(input.tankCapacity) || input.tankCapacity < 10 || input.tankCapacity > 200) return 'Indica una capacidad de depósito entre 10 y 200 litros.';
+  } else if (!Number.isFinite(input.amount) || input.amount < 5 || input.amount > 500) {
+    return 'Indica un importe entre 5 € y 500 €.';
+  }
   if (!Number.isFinite(input.radius) || input.radius < 1 || input.radius > 50) return 'Indica un radio entre 1 y 50 km.';
   return '';
+}
+
+function recommendationRequest(input, selectedStationId = '') {
+  if (!state.position) throw new Error('La ubicación todavía no está disponible.');
+  return {
+    latitude: state.position.latitude,
+    longitude: state.position.longitude,
+    radius: input.radius,
+    limit: 100,
+    fuelKey: input.fuelKey,
+    consumption: input.consumption,
+    amount: input.amount,
+    tankCapacity: input.tankCapacity,
+    tripMode: input.tripMode,
+    fullTank: Boolean(input.fullTank),
+    discounts: state.discounts,
+    selectedStationId: selectedStationId || undefined
+  };
+}
+
+async function fetchRecommendation(input) {
+  await requestPosition();
+  const payload = await apiFetch('recommend', '', {
+    method: 'POST',
+    body: recommendationRequest(input)
+  });
+  state.stations = Array.isArray(payload.items) ? payload.items : [];
+  recordSnapshots(state.stations);
+  if (!payload.best) throw new Error('No hay gasolineras compatibles dentro del radio seleccionado.');
+  return payload;
 }
 
 async function executeSearch(event) {
@@ -543,25 +748,26 @@ async function executeSearch(event) {
 
   syncSearchControls(input);
   el.quickSearchButton.disabled = true;
-  el.quickSearchButton.querySelector('span').textContent = 'Buscando la mejor opción…';
-  el.stationList.innerHTML = '<div class="loading">Comparando precios y distancias…</div>';
+  el.quickSearchButton.querySelector('span').textContent = input.fullTank ? 'Calculando el depósito completo…' : 'Buscando la mejor opción…';
+  el.stationList.innerHTML = '<div class="loading">Comparando precios, distancia y consumo del trayecto…</div>';
   el.bestResult.hidden = true;
 
   try {
-    await fetchStations(input.radius);
-    const ranked = rankNormalizedStations(state.stations, input);
-    if (!ranked.length) throw new Error('No hay gasolineras con precio para este combustible dentro del radio seleccionado.');
-    const best = ranked[0];
-    const nearest = [...ranked].sort((a, b) => a.distanceKm - b.distanceKm)[0];
-    const saving = equivalentSaving(best, nearest);
+    const payload = await fetchRecommendation(input);
+    const best = payload.best;
+    const nearest = payload.nearest || best;
+    const saving = Number(payload.saving || 0);
+    if (input.fullTank) input.amount = Number(best.tankCost || input.tankCapacity * best.price);
     state.currentSimulation = {
       best,
       nearest,
       saving,
       input,
+      mode: input.fullTank ? 'fullTank' : 'amount',
       radius: input.radius,
       vehicleId: input.vehicleId,
-      registered: false
+      registered: false,
+      serverCalculated: true
     };
     renderBestResult();
     renderStations();
@@ -573,11 +779,11 @@ async function executeSearch(event) {
     showError(el.quickSearchError, searchError.message);
   } finally {
     el.quickSearchButton.disabled = false;
-    el.quickSearchButton.querySelector('span').textContent = 'Encontrar la gasolinera más barata';
+    updateSearchModeUi();
   }
 }
 
-async function runFullTankSearch({ openRoute = true } = {}) {
+async function runFullTankSearch({ openRoute = false } = {}) {
   clearError(el.quickSearchError);
   const vehicle = activeVehicle();
   if (!vehicle || !Number.isFinite(Number(vehicle.tank)) || Number(vehicle.tank) <= 0) {
@@ -597,26 +803,28 @@ async function runFullTankSearch({ openRoute = true } = {}) {
     discounts: state.discounts,
     fullTank: true
   };
-  if (!Number.isFinite(input.consumption) || input.consumption <= 0) {
-    toast('Revisa el consumo del vehículo.');
+  const error = validateSearch(input);
+  if (error) {
+    toast(error);
     openVehicleDialog(vehicle);
     return;
   }
 
   syncSearchControls({ ...input, amount: state.filters.amount || 50 });
-  el.fullTankButton.disabled = true;
-  el.fullTankButton.querySelector('span').textContent = 'Calculando la mejor ruta…';
+  if (el.fullTankButton) {
+    el.fullTankButton.disabled = true;
+    const label = el.fullTankButton.querySelector('span');
+    if (label) label.textContent = 'Calculando la mejor opción…';
+  }
   el.stationList.innerHTML = '<div class="loading">Comparando el coste del depósito y del desplazamiento…</div>';
   el.bestResult.hidden = true;
 
   try {
-    await fetchStations(input.radius);
-    const ranked = rankFullTankStations(state.stations, input);
-    if (!ranked.length) throw new Error('No hay gasolineras válidas para llenar el depósito dentro del radio seleccionado.');
-    const best = ranked[0];
-    const nearest = [...ranked].sort((a, b) => a.distanceKm - b.distanceKm)[0];
-    const saving = equivalentSaving(best, nearest);
-    input.amount = best.tankCost;
+    const payload = await fetchRecommendation(input);
+    const best = payload.best;
+    const nearest = payload.nearest || best;
+    const saving = Number(payload.saving || 0);
+    input.amount = Number(best.tankCost || input.tankCapacity * best.price);
     state.currentSimulation = {
       best,
       nearest,
@@ -625,22 +833,24 @@ async function runFullTankSearch({ openRoute = true } = {}) {
       mode: 'fullTank',
       radius: input.radius,
       vehicleId: vehicle.id,
-      registered: false
+      registered: false,
+      serverCalculated: true
     };
     renderBestResult();
     renderStations();
     renderMapPreview();
     await checkFavoritePrices(false);
     el.bestResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (openRoute) {
-      window.setTimeout(() => { window.location.href = mapsUrl(best); }, 250);
-    }
-  } catch (error) {
-    el.stationList.replaceChildren(emptyState(error.message));
-    showError(el.quickSearchError, error.message);
+    if (openRoute) window.setTimeout(() => { window.location.href = mapsUrl(best); }, 250);
+  } catch (searchError) {
+    el.stationList.replaceChildren(emptyState(searchError.message));
+    showError(el.quickSearchError, searchError.message);
   } finally {
-    el.fullTankButton.disabled = false;
-    el.fullTankButton.querySelector('span').textContent = 'Buscar y abrir la ruta';
+    if (el.fullTankButton) {
+      el.fullTankButton.disabled = false;
+      const label = el.fullTankButton.querySelector('span');
+      if (label) label.textContent = 'Buscar la mejor gasolinera';
+    }
   }
 }
 
@@ -666,8 +876,14 @@ function renderBestResult() {
   el.bestName.textContent = best.name;
   el.bestAddress.textContent = best.address;
   el.bestPrice.textContent = `${num(best.price)} €/l`;
-  el.bestDistance.textContent = `${num(best.roadDistanceKm, 1)} km`;
+  const isRoundTrip = simulation.input.tripMode !== 'oneway';
+  const calculatedTripKm = Number(best.tripKm ?? (best.roadDistanceKm * (isRoundTrip ? 2 : 1)));
+  const refuelCost = simulation.mode === 'fullTank'
+    ? Number(best.tankCost ?? simulation.input.amount)
+    : Number(simulation.input.amount);
+  el.bestDistance.textContent = `${num(calculatedTripKm, 1)} km · ${isRoundTrip ? 'ida y vuelta' : 'solo ida'}`;
   el.bestNetLiters.textContent = `${num(best.netLiters, 2)} l`;
+  if (el.bestRefuelCost) el.bestRefuelCost.textContent = euro.format(refuelCost);
   el.bestSaving.textContent = euro.format(saving);
   el.bestSavingCopy.textContent = simulation.mode === 'fullTank'
     ? (nearest.id === best.id ? 'la opción más cercana también es la mejor para llenar el depósito' : `frente a llenar el depósito en ${nearest.name}`)
@@ -678,6 +894,58 @@ function renderBestResult() {
   el.markRefueled.disabled = Boolean(simulation.registered);
   el.markRefueled.textContent = simulation.registered ? 'REPOSTAJE GUARDADO' : 'Marcar como REPOSTADO';
   el.bestResult.hidden = false;
+}
+
+async function openComparison(selectedStation) {
+  const simulation = state.currentSimulation;
+  if (!simulation?.best) {
+    toast('Realiza primero una búsqueda para calcular la mejor opción.');
+    return;
+  }
+
+  const input = { ...simulation.input, discounts: state.discounts };
+  try {
+    await requestPosition();
+    const payload = await apiFetch('compare-stations', '', {
+      method: 'POST',
+      body: recommendationRequest(input, selectedStation.id)
+    });
+    const comparison = payload.comparison;
+    if (!comparison?.best || !comparison?.selected) throw new Error('No se pudo comparar esa gasolinera.');
+    const { best, selected } = comparison;
+    const saving = Number(comparison.saving || 0);
+    const extraUsefulLiters = Number(comparison.extraUsefulLiters || 0);
+    const referenceLiters = Number(comparison.referenceLiters || best.netLiters || 0);
+    const tripLabel = input.tripMode === 'oneway' ? 'solo ida' : 'ida y vuelta';
+    const bestEquivalentCost = Number(best.effectivePrice) * referenceLiters;
+    const selectedEquivalentCost = Number(selected.effectivePrice) * referenceLiters;
+
+    el.compareBestName.textContent = best.name;
+    el.compareBestPrice.textContent = `${num(best.price)} €/l`;
+    el.compareBestTrip.textContent = `${num(best.tripKm, 1)} km · ${tripLabel}`;
+    el.compareBestTripFuel.textContent = `${num(best.tripLiters, 2)} l`;
+    el.compareBestCost.textContent = euro.format(bestEquivalentCost);
+
+    el.compareSelectedName.textContent = selected.name;
+    el.compareSelectedPrice.textContent = `${num(selected.price)} €/l`;
+    el.compareSelectedTrip.textContent = `${num(selected.tripKm, 1)} km · ${tripLabel}`;
+    el.compareSelectedTripFuel.textContent = `${num(selected.tripLiters, 2)} l`;
+    el.compareSelectedCost.textContent = euro.format(selectedEquivalentCost);
+
+    el.compareSaving.textContent = euro.format(saving);
+    if (String(best.id) === String(selected.id)) {
+      el.compareSavingCopy.textContent = 'La gasolinera seleccionada ya es la mejor opción por precio y desplazamiento.';
+    } else {
+      const modeCopy = simulation.mode === 'fullTank'
+        ? 'para obtener la misma cantidad útil tras llenar el depósito'
+        : `para obtener los mismos ${num(referenceLiters, 2)} litros útiles`;
+      el.compareSavingCopy.textContent = `Ahorras ${euro.format(saving)} ${modeCopy}. Además aprovechas ${num(extraUsefulLiters, 2)} litros útiles más con el mismo criterio de búsqueda.`;
+    }
+    el.compareBestRoute.href = mapsUrl(best);
+    openDialog(el.comparisonDialog);
+  } catch (error) {
+    toast(error.message || 'No se pudo realizar la comparación.');
+  }
 }
 
 function renderStations() {
@@ -720,7 +988,7 @@ function renderStations() {
     favorite.textContent = isFavorite(station.id) ? '★' : '☆';
     favorite.classList.toggle('is-favorite', isFavorite(station.id));
     favorite.addEventListener('click', () => toggleFavorite(station));
-    node.querySelector('.compare-btn').addEventListener('click', () => scrollToSearch(station));
+    node.querySelector('.compare-btn').addEventListener('click', () => openComparison(station));
     node.querySelector('.route-btn').href = mapsUrl(station);
     el.stationList.appendChild(node);
   }
@@ -817,7 +1085,7 @@ function renderFavorites() {
 }
 
 function renderHomeWidgets() {
-  if (!el.favoriteWidgetList || !el.fullTankHint) return;
+  if (!el.favoriteWidgetList) return;
   el.favoriteWidgetList.replaceChildren();
   const favorites = state.favorites.slice(0, 3);
   if (!favorites.length) {
@@ -846,9 +1114,11 @@ function renderHomeWidgets() {
     }
   }
   const vehicle = activeVehicle();
-  el.fullTankHint.textContent = vehicle
-    ? `${vehicle.name} · ${fuelLabel(vehicle.fuelKey)} · depósito de ${num(Number(vehicle.tank), 0)} l`
-    : 'Añade un vehículo con consumo, combustible y capacidad de depósito.';
+  if (el.fullTankHint) {
+    el.fullTankHint.textContent = vehicle
+      ? `${vehicle.name} · ${fuelLabel(vehicle.fuelKey)} · depósito de ${num(Number(vehicle.tank), 0)} l`
+      : 'Añade un vehículo con consumo, combustible y capacidad de depósito.';
+  }
 }
 
 function recordSnapshots(stations) {
@@ -1052,19 +1322,69 @@ function mapStations() {
 }
 
 function loadGoogleMaps() {
-  if (window.google?.maps) return Promise.resolve(window.google.maps);
+  if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
   if (state.mapsPromise) return state.mapsPromise;
-  if (!state.settings.googleMapsKey) return Promise.reject(new Error('Configura la clave de Google Maps.'));
+  const apiKey = String(state.settings.googleMapsKey || '').trim();
+  if (!apiKey) return Promise.reject(new Error('Google Maps no está configurado. Se mostrará el mapa alternativo.'));
+
   state.mapsPromise = new Promise((resolve, reject) => {
-    const callback = `cb_${Date.now()}`;
-    window[callback] = () => { delete window[callback]; resolve(window.google.maps); };
+    const callback = `combusplusMapsReady_${Date.now()}`;
+    const previousAuthFailure = window.gm_authFailure;
+    let finished = false;
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      try { delete window[callback]; } catch { window[callback] = undefined; }
+      window.gm_authFailure = previousAuthFailure;
+      if (error) {
+        state.mapsPromise = null;
+        reject(error);
+      } else {
+        resolve(window.google.maps);
+      }
+    };
+    window[callback] = () => finish(null);
+    window.gm_authFailure = () => finish(new Error('Google Maps ha rechazado la clave o sus restricciones. Se mostrará el mapa alternativo.'));
+
     const script = document.createElement('script');
+    script.id = 'combusplus-google-maps';
     script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(state.settings.googleMapsKey)}&loading=async&callback=${callback}&language=es&region=ES${state.settings.googleMapId ? `&map_ids=${encodeURIComponent(state.settings.googleMapId)}` : ''}`;
-    script.onerror = () => reject(new Error('No se pudo cargar Google Maps.'));
+    script.defer = true;
+    const query = new URLSearchParams({
+      key: apiKey,
+      callback,
+      language: 'es',
+      region: 'ES',
+      v: 'weekly',
+      loading: 'async'
+    });
+    script.src = `https://maps.googleapis.com/maps/api/js?${query.toString()}`;
+    script.onerror = () => finish(new Error('No se pudo descargar Google Maps. Se mostrará el mapa alternativo.'));
     document.head.appendChild(script);
+    const timeout = setTimeout(() => finish(new Error('Google Maps ha tardado demasiado. Se mostrará el mapa alternativo.')), 12000);
   });
   return state.mapsPromise;
+}
+
+function renderOpenStreetMapFallback(items, cause = '') {
+  const station = state.currentSimulation?.best || items[0];
+  el.googleMap.innerHTML = '';
+  if (!station || !Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
+    el.googleMap.appendChild(emptyState(cause || 'No hay una ubicación válida para mostrar el mapa.'));
+    return;
+  }
+  const lat = station.latitude;
+  const lon = station.longitude;
+  const deltaLat = 0.06;
+  const deltaLon = 0.09;
+  const bbox = [lon - deltaLon, lat - deltaLat, lon + deltaLon, lat + deltaLat].join(',');
+  const frameUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}`;
+  const route = mapsUrl(station);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'map-fallback';
+  wrapper.innerHTML = `<iframe title="Mapa de ${escapeHtml(station.name)}" loading="lazy" referrerpolicy="no-referrer" src="${frameUrl}"></iframe><div class="map-fallback-note"><span>${escapeHtml(cause || 'Mapa alternativo activo')} · Marcador en ${escapeHtml(station.name)}</span><a href="${route}" target="_blank" rel="noopener noreferrer">Abrir ruta</a></div>`;
+  el.googleMap.appendChild(wrapper);
 }
 
 async function renderMap() {
@@ -1073,23 +1393,26 @@ async function renderMap() {
     el.googleMap.appendChild(emptyState('Realiza una búsqueda desde la pestaña Buscar.'));
     return;
   }
+  const items = mapStations();
   try {
     const maps = await loadGoogleMaps();
-    const center = state.position ? { lat: state.position.latitude, lng: state.position.longitude } : { lat: 40.4168, lng: -3.7038 };
+    const center = state.position ? { lat: state.position.latitude, lng: state.position.longitude } : { lat: items[0]?.latitude || 40.4168, lng: items[0]?.longitude || -3.7038 };
     if (!state.map) {
-      state.map = new maps.Map(el.googleMap, {
+      const mapOptions = {
         center,
         zoom: 12,
-        mapId: state.settings.googleMapId || undefined,
         streetViewControl: false,
         mapTypeControl: false,
-        fullscreenControl: true
-      });
+        fullscreenControl: true,
+        gestureHandling: 'greedy'
+      };
+      const mapId = String(state.settings.googleMapId || '').trim();
+      if (mapId && mapId !== 'DEMO_MAP_ID') mapOptions.mapId = mapId;
+      state.map = new maps.Map(el.googleMap, mapOptions);
     }
     state.map.setCenter(center);
-    state.markers.forEach(marker => marker.setMap(null));
+    state.markers.forEach(marker => marker.setMap?.(null));
     state.markers = [];
-    const items = mapStations();
     for (const station of items) {
       if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) continue;
       const marker = new maps.Marker({
@@ -1112,8 +1435,9 @@ async function renderMap() {
     el.mapModeLabel.textContent = state.filters.mapMode === 'top10' ? '10 más baratas' : `${items.length} gasolineras`;
     renderMapPreview();
   } catch (error) {
-    el.googleMap.innerHTML = '';
-    el.googleMap.appendChild(emptyState(error.message));
+    renderOpenStreetMapFallback(items, error.message);
+    el.mapModeLabel.textContent = `${items.length} gasolineras · mapa alternativo`;
+    renderMapPreview();
   }
 }
 
@@ -1231,6 +1555,7 @@ function saveVehicleForm(event) {
     fuelKey: el.vehicleFuel.value
   };
   if (!vehicle.name) return showError(el.vehicleError, 'Indica un nombre.');
+  if (!Number.isFinite(vehicle.tank) || vehicle.tank < 10 || vehicle.tank > 200) return showError(el.vehicleError, 'Indica un depósito entre 10 y 200 litros.');
   if (!Number.isFinite(vehicle.consumption) || vehicle.consumption < 1 || vehicle.consumption > 30) return showError(el.vehicleError, 'Consumo no válido.');
   const index = state.vehicles.findIndex(item => item.id === vehicle.id);
   if (index >= 0) state.vehicles[index] = vehicle;
@@ -1295,60 +1620,21 @@ function saveDiscountForm(event) {
 }
 
 function populateSettings() {
-  el.supabaseFunctionsUrl.value = state.settings.supabaseFunctionsUrl || '';
-  el.supabasePublishableKey.value = state.settings.supabasePublishableKey || '';
-  el.appAccessToken.value = state.settings.appAccessToken || '';
-  el.googleMapsKey.value = state.settings.googleMapsKey || '';
-  el.googleMapId.value = state.settings.googleMapId || '';
   el.notificationsEnabled.checked = state.settings.notificationsEnabled;
   el.notificationInterval.value = state.settings.notificationInterval;
   el.notificationThreshold.value = state.settings.notificationThreshold;
   el.notificationDirection.value = state.settings.notificationDirection;
-  el.serverStatus.textContent = 'Sin comprobar';
-  el.serverStatus.className = '';
-}
-
-async function testServerConnection() {
-  clearError(el.settingsError);
-  const previous = { ...state.settings };
-  state.settings.supabaseFunctionsUrl = el.supabaseFunctionsUrl.value.trim();
-  state.settings.supabasePublishableKey = el.supabasePublishableKey.value.trim();
-  state.settings.appAccessToken = el.appAccessToken.value.trim();
-  el.testServer.disabled = true;
-  el.serverStatus.textContent = 'Comprobando…';
-  el.serverStatus.className = '';
-  try {
-    const payload = await apiFetch('health', '');
-    if (!payload?.ok) throw new Error('Respuesta no válida del servidor.');
-    el.serverStatus.textContent = 'Servidor conectado';
-    el.serverStatus.className = 'ok';
-  } catch (error) {
-    el.serverStatus.textContent = 'Conexión fallida';
-    el.serverStatus.className = 'error';
-    showError(el.settingsError, error.message);
-  } finally {
-    state.settings = { ...previous };
-    el.testServer.disabled = false;
-  }
 }
 
 function saveSettingsForm(event) {
   event.preventDefault();
   clearError(el.settingsError);
-  const functionsUrl = el.supabaseFunctionsUrl.value.trim().replace(/\/$/, '');
-  const publishableKey = el.supabasePublishableKey.value.trim();
-  const accessToken = el.appAccessToken.value.trim();
-  if (!/^https:\/\/.+\.supabase\.co\/functions\/v1$/i.test(functionsUrl) && !/^https:\/\//i.test(functionsUrl)) {
-    return showError(el.settingsError, 'Indica una URL válida de Edge Functions.');
-  }
-  if (!publishableKey) return showError(el.settingsError, 'Indica la clave pública de Supabase.');
-  if (!accessToken) return showError(el.settingsError, 'Indica tu código personal de acceso.');
   state.settings = {
-    supabaseFunctionsUrl: functionsUrl,
-    supabasePublishableKey: publishableKey,
-    appAccessToken: accessToken,
-    googleMapsKey: el.googleMapsKey.value.trim(),
-    googleMapId: el.googleMapId.value.trim(),
+    ...state.settings,
+    supabaseFunctionsUrl: String(RUNTIME_CONFIG.supabaseFunctionsUrl || state.settings.supabaseFunctionsUrl || '').replace(/\/$/, ''),
+    supabasePublishableKey: String(RUNTIME_CONFIG.supabasePublishableKey || state.settings.supabasePublishableKey || ''),
+    googleMapsKey: String(RUNTIME_CONFIG.googleMapsKey || state.settings.googleMapsKey || ''),
+    googleMapId: String(RUNTIME_CONFIG.googleMapId || state.settings.googleMapId || ''),
     notificationsEnabled: el.notificationsEnabled.checked,
     notificationInterval: Number(el.notificationInterval.value),
     notificationThreshold: Number(el.notificationThreshold.value),
@@ -1357,7 +1643,7 @@ function saveSettingsForm(event) {
   saveSettings();
   closeDialog(el.settingsDialog);
   state.mapsPromise = null;
-  toast('Ajustes guardados de forma local');
+  toast('Preferencias guardadas');
 }
 
 async function requestNotificationPermission() {
@@ -1382,9 +1668,12 @@ function syncNativeConfig() {
     direction: state.settings.notificationDirection,
     supabaseFunctionsUrl: state.settings.supabaseFunctionsUrl,
     supabasePublishableKey: state.settings.supabasePublishableKey,
-    appAccessToken: state.settings.appAccessToken,
+    installationId: installationId(),
+    sessionToken: state.backendSession.token || readStoredValue(STORAGE.sessionToken) || '',
+    sessionExpiresAt: Number(state.backendSession.expiresAt || readStoredValue(STORAGE.sessionExpiresAt) || 0),
     selectedVehicleId: state.selectedVehicleId,
     vehicles: state.vehicles,
+    discounts: state.discounts,
     favorites: state.favorites.map(favorite => ({
       id: favorite.id,
       name: favorite.name,
@@ -1426,10 +1715,11 @@ function exportData() {
   const blob = new Blob([JSON.stringify({
     exportedAt: nowIso(),
     vehicles: state.vehicles,
+    discounts: state.discounts,
     favorites: state.favorites,
     discounts: state.discounts,
     history: state.history,
-    settings: { ...state.settings, appAccessToken: '', supabasePublishableKey: '', googleMapsKey: '' }
+    settings: { ...state.settings, supabasePublishableKey: '', googleMapsKey: '' }
   }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -1448,9 +1738,20 @@ function bind() {
   el.openSettings.addEventListener('click', () => { populateSettings(); openDialog(el.settingsDialog); });
   el.quickSearchForm.addEventListener('submit', executeSearch);
   el.quickVehicle.addEventListener('change', applyVehicleToSearch);
+  $$('input[name="searchMode"]').forEach(input => input.addEventListener('change', updateSearchModeUi));
+  el.quickTankCapacity?.addEventListener('input', updateSearchModeUi);
   el.quickFuel.addEventListener('change', () => { state.filters.fuelKey = el.quickFuel.value; el.listFuel.value = el.quickFuel.value; saveFilters(); });
   el.quickAmount.addEventListener('change', () => { state.filters.amount = Number(el.quickAmount.value); saveFilters(); });
   el.quickRadius.addEventListener('change', () => { state.filters.radius = Number(el.quickRadius.value); el.listRadius.value = el.quickRadius.value; saveFilters(); });
+  $$('input[name="quickTrip"]').forEach(input => input.addEventListener('change', () => {
+    state.filters.tripMode = input.value;
+    saveFilters();
+    if (state.currentSimulation) {
+      state.currentSimulation = null;
+      el.bestResult.hidden = true;
+      renderStations();
+    }
+  }));
   el.refreshLocation.addEventListener('click', async () => {
     try { await requestPosition(true); toast('Ubicación actualizada'); }
     catch (error) { showError(el.quickSearchError, error.message); }
@@ -1464,7 +1765,7 @@ function bind() {
       el.refreshFavoriteWidget.disabled = false;
     }
   });
-  el.fullTankButton?.addEventListener('click', () => runFullTankSearch({ openRoute: true }));
+  el.fullTankButton?.addEventListener('click', () => runFullTankSearch({ openRoute: false }));
 
   el.bestFavorite.addEventListener('click', () => state.currentSimulation && toggleFavorite(state.currentSimulation.best));
   el.bestDetails.addEventListener('click', () => state.currentSimulation && openStationDetail(state.currentSimulation.best));
@@ -1477,7 +1778,7 @@ function bind() {
   el.listSort.addEventListener('change', () => { state.filters.sort = el.listSort.value; saveFilters(); renderStations(); });
 
   el.refreshMap.addEventListener('click', async () => { await searchStations(); navigate('map'); });
-  el.configureMap.addEventListener('click', () => { populateSettings(); openDialog(el.settingsDialog); });
+  el.configureMap.addEventListener('click', () => renderMap());
   el.mapTopTenToggle.addEventListener('click', () => {
     state.filters.mapMode = state.filters.mapMode === 'top10' ? 'all' : 'top10';
     el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));
@@ -1516,13 +1817,16 @@ function bind() {
     saveFavorites();
     updateDetailFavoriteButtons();
   });
-  el.detailSimulate.addEventListener('click', () => scrollToSearch(state.currentStation));
+  el.detailSimulate.addEventListener('click', () => {
+    if (!state.currentStation) return;
+    closeDialog(el.stationDialog);
+    openComparison(state.currentStation);
+  });
 
   el.filtersForm.addEventListener('submit', event => { event.preventDefault(); applyFiltersFromDialog(); });
   el.vehicleForm.addEventListener('submit', saveVehicleForm);
   el.discountForm.addEventListener('submit', saveDiscountForm);
   el.settingsForm.addEventListener('submit', saveSettingsForm);
-  el.testServer?.addEventListener('click', testServerConnection);
   el.requestNotifications.addEventListener('click', requestNotificationPermission);
 }
 
@@ -1535,6 +1839,7 @@ function init() {
 
   el.quickFuel.value = state.filters.fuelKey;
   el.quickConsumption.value = state.filters.consumption;
+  el.quickTankCapacity.value = activeVehicle()?.tank || 50;
   el.quickAmount.value = state.filters.amount;
   el.quickRadius.value = state.filters.radius;
   const trip = $(`input[name="quickTrip"][value="${state.filters.tripMode}"]`);
@@ -1550,17 +1855,21 @@ function init() {
   renderStats();
   populateFilters();
   bind();
+  updateSearchModeUi();
   navigate(location.hash.slice(1) || 'list');
   window.addEventListener('hashchange', () => navigate(location.hash.slice(1) || 'list'));
   syncNativeConfig();
+  ensureBackendSession().then(() => syncNativeConfig()).catch(error => {
+    console.error('No se pudo iniciar la sesión segura:', error);
+  });
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   setTimeout(() => checkFavoritePrices(true), 1200);
-  if (!state.settings.supabaseFunctionsUrl || !state.settings.supabasePublishableKey || !state.settings.appAccessToken) {
-    setTimeout(() => { populateSettings(); openDialog(el.settingsDialog); }, 450);
+  if (!state.settings.supabaseFunctionsUrl || !state.settings.supabasePublishableKey) {
+    console.error('Combusplus no tiene configurado el backend público de Supabase.');
   }
   try {
     if (window.AndroidBridge?.consumeFullTankLaunch?.()) {
-      setTimeout(() => runFullTankSearch({ openRoute: true }), 900);
+      setTimeout(() => runFullTankSearch({ openRoute: false }), 900);
     }
   } catch { /* no es la aplicación Android */ }
 }

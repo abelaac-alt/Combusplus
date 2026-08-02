@@ -1,7 +1,6 @@
 package com.grupomds.combusplus;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
 import androidx.work.Worker;
@@ -30,8 +29,7 @@ public class PriceWatchWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
-        SharedPreferences prefs = getApplicationContext().getSharedPreferences(PriceWatchScheduler.PREFS, Context.MODE_PRIVATE);
-        String rawConfig = prefs.getString(PriceWatchScheduler.CONFIG, "");
+        String rawConfig = SecureLocalStore.getString(getApplicationContext(), PriceWatchScheduler.CONFIG, "");
         if (rawConfig.trim().isEmpty()) return Result.success();
 
         try {
@@ -49,7 +47,7 @@ public class PriceWatchWorker extends Worker {
                 if (favorite == null) continue;
                 boolean notifyThisFavorite = notificationsEnabled && favorite.optBoolean("notifications", true);
                 try {
-                    checkFavorite(config, favorite, threshold, direction, prefs, notifyThisFavorite);
+                    checkFavorite(config, favorite, threshold, direction, notifyThisFavorite);
                 } catch (Exception exception) {
                     hadTemporaryFailure = true;
                 }
@@ -61,22 +59,26 @@ public class PriceWatchWorker extends Worker {
         }
     }
 
-    private void checkFavorite(JSONObject config, JSONObject favorite, double threshold, String direction, SharedPreferences prefs, boolean notify) throws Exception {
+    private void checkFavorite(JSONObject config, JSONObject favorite, double threshold, String direction, boolean notify) throws Exception {
         double latitude = favorite.optDouble("latitude", Double.NaN);
         double longitude = favorite.optDouble("longitude", Double.NaN);
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
 
         String functionsUrl = config.optString("supabaseFunctionsUrl", "").replaceAll("/+$", "");
         String publishableKey = config.optString("supabasePublishableKey", "");
-        String accessToken = config.optString("appAccessToken", "");
-        if (functionsUrl.trim().isEmpty() || publishableKey.trim().isEmpty() || accessToken.trim().isEmpty()) return;
+        String sessionToken = config.optString("sessionToken", "");
+        String installationId = config.optString("installationId", "");
+        long sessionExpiresAt = config.optLong("sessionExpiresAt", 0L);
+        if (functionsUrl.trim().isEmpty() || publishableKey.trim().isEmpty()
+                || sessionToken.trim().isEmpty() || installationId.trim().isEmpty()
+                || sessionExpiresAt <= System.currentTimeMillis()) return;
 
         String query = "latitud=" + encode(String.format(Locale.US, "%.6f", latitude)) +
                 "&longitud=" + encode(String.format(Locale.US, "%.6f", longitude)) +
                 "&radio=1&pagina=1&limite=50&fields=current";
         String endpoint = functionsUrl + "/stations-nearby?" + query;
 
-        JSONObject response = getJson(endpoint, publishableKey, accessToken);
+        JSONObject response = getJson(endpoint, publishableKey, sessionToken, installationId);
         JSONArray stations = findStationArray(response);
         if (stations == null) return;
 
@@ -91,14 +93,13 @@ public class PriceWatchWorker extends Worker {
 
         String prefKey = pricePreferenceKey(favoriteId, fuelKey);
         String changeKey = changePreferenceKey(favoriteId, fuelKey);
-        double previous = prefs.contains(prefKey)
-                ? Double.longBitsToDouble(prefs.getLong(prefKey, 0L))
-                : favorite.optDouble("lastPrice", Double.NaN);
+        String previousText = SecureLocalStore.getString(getApplicationContext(), prefKey, "");
+        double previous = previousText.isEmpty()
+                ? favorite.optDouble("lastPrice", Double.NaN)
+                : parseDouble(previousText, Double.NaN);
         double change = Double.isFinite(previous) ? price - previous : 0d;
-        prefs.edit()
-                .putLong(prefKey, Double.doubleToRawLongBits(price))
-                .putLong(changeKey, Double.doubleToRawLongBits(change))
-                .apply();
+        SecureLocalStore.putString(getApplicationContext(), prefKey, Double.toString(price));
+        SecureLocalStore.putString(getApplicationContext(), changeKey, Double.toString(change));
         if (!Double.isFinite(previous) || !notify) return;
 
         if (Math.abs(change) + 0.0000001 < threshold) return;
@@ -114,16 +115,17 @@ public class PriceWatchWorker extends Worker {
         NotificationHelper.show(getApplicationContext(), notificationId, title, body);
     }
 
-    private JSONObject getJson(String endpoint, String publishableKey, String accessToken) throws Exception {
+    private JSONObject getJson(String endpoint, String publishableKey, String sessionToken, String installationId) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(12000);
         connection.setReadTimeout(12000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroid/7.0");
+        connection.setRequestProperty("User-Agent", "CombusplusAndroid/8.0");
         connection.setRequestProperty("apikey", publishableKey);
         connection.setRequestProperty("Authorization", "Bearer " + publishableKey);
-        connection.setRequestProperty("X-Combusplus-Token", accessToken);
+        connection.setRequestProperty("X-Combusplus-Session", sessionToken);
+        connection.setRequestProperty("X-Installation-Id", installationId);
         int status = connection.getResponseCode();
         if (status < 200 || status >= 300) throw new IllegalStateException("HTTP " + status);
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
@@ -134,6 +136,11 @@ public class PriceWatchWorker extends Worker {
         } finally {
             connection.disconnect();
         }
+    }
+
+    private static double parseDouble(String value, double fallback) {
+        try { return Double.parseDouble(value); }
+        catch (Exception ignored) { return fallback; }
     }
 
     static String pricePreferenceKey(String stationId, String fuelKey) {

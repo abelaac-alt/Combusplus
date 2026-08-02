@@ -1,6 +1,11 @@
-import { clientIdentity, jsonResponse, preflight, safeError } from '../_shared/security.ts';
-import { enforceRateLimit, nearbySnapshot, storeStations } from '../_shared/database.ts';
-import { fetchProviderStations } from '../_shared/provider.ts';
+import { enforceRateLimit, nearbySnapshot } from '../_shared/database.ts';
+import { requireDeviceSession } from '../_shared/session.ts';
+import {
+  jsonResponse,
+  preflight,
+  requireTrustedOrigin,
+  safeError,
+} from '../_shared/security.ts';
 
 function numberParam(url: URL, name: string, min: number, max: number): number | null {
   const value = Number(url.searchParams.get(name));
@@ -11,11 +16,14 @@ Deno.serve(async (req) => {
   const options = preflight(req);
   if (options) return options;
   if (req.method !== 'GET') return jsonResponse(req, { ok: false, error: 'Método no permitido.' }, 405);
-
+  const originError = requireTrustedOrigin(req);
+  if (originError) return originError;
+  const session = await requireDeviceSession(req);
+  if ('response' in session) return session.response;
 
   try {
-    const rateLimit = Number(Deno.env.get('RATE_LIMIT_PER_MINUTE') || '90');
-    const allowed = await enforceRateLimit(clientIdentity(req), Math.max(10, Math.min(rateLimit, 300)));
+    const rateLimit = Math.max(20, Math.min(Number(Deno.env.get('RATE_LIMIT_PER_MINUTE') || 90), 300));
+    const allowed = await enforceRateLimit(`stations:${session.payload.sub}`, rateLimit, 60);
     if (!allowed) return jsonResponse(req, { ok: false, error: 'Demasiadas solicitudes. Espera un minuto.' }, 429);
 
     const url = new URL(req.url);
@@ -27,42 +35,26 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { ok: false, error: 'Ubicación o radio no válidos.' }, 400);
     }
 
-    let items = await nearbySnapshot(latitude, longitude, radius, limit);
+    const items = await nearbySnapshot(latitude, longitude, radius, limit);
     const newest = items.reduce((latest, item) => {
       const value = Date.parse(String(item.fechaActualizacion || '')) || 0;
       return Math.max(latest, value);
     }, 0);
-    const cacheMinutes = Math.max(1, Number(Deno.env.get('CACHE_MINUTES') || '15'));
+    const cacheMinutes = Math.max(1, Number(Deno.env.get('CACHE_MINUTES') || 15));
     const stale = !newest || Date.now() - newest > cacheMinutes * 60_000;
-    let refreshed = false;
-    let upstreamWarning: string | null = null;
-
-    if (!items.length || stale) {
-      try {
-        const normalized = await fetchProviderStations(latitude, longitude, radius, limit);
-        await storeStations(normalized);
-        items = await nearbySnapshot(latitude, longitude, radius, limit);
-        refreshed = true;
-      } catch (error) {
-        upstreamWarning = safeError(error);
-        if (!items.length) throw error;
-      }
-    }
 
     return jsonResponse(req, {
       ok: true,
-      version: '7.0.0',
+      version: '8.0.0',
       items,
       count: items.length,
       cache: {
         stale,
-        refreshed,
         newestAt: newest ? new Date(newest).toISOString() : null,
-        warning: upstreamWarning,
       },
       generatedAt: new Date().toISOString(),
     }, 200, 'private, max-age=30');
   } catch (error) {
-    return jsonResponse(req, { ok: false, error: safeError(error) }, 502);
+    return jsonResponse(req, { ok: false, error: safeError(error) }, 500);
   }
 });

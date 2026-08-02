@@ -25,7 +25,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 
-import java.net.URI;
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final int LOCATION_REQUEST = 1001;
@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        SecureLocalStore.migrateLegacy(this);
         NotificationHelper.createChannel(this);
         PriceWatchScheduler.restore(this);
 
@@ -90,6 +91,7 @@ public class MainActivity extends Activity {
         });
         ViewCompat.requestApplyInsets(root);
 
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -107,7 +109,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(false);
         settings.setLoadWithOverviewMode(false);
         settings.setTextZoom(100);
-        settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/7.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/8.0");
 
         webView.addJavascriptInterface(webBridge, "AndroidBridge");
         webView.setWebChromeClient(new android.webkit.WebChromeClient() {
@@ -116,6 +118,10 @@ public class MainActivity extends Activity {
                     String origin,
                     GeolocationPermissions.Callback callback
             ) {
+                if (origin == null || !origin.startsWith("https://appassets.androidplatform.net")) {
+                    callback.invoke(origin, false, false);
+                    return;
+                }
                 if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                         == PackageManager.PERMISSION_GRANTED) {
                     callback.invoke(origin, true, false);
@@ -202,18 +208,8 @@ public class MainActivity extends Activity {
     }
 
     private boolean isTrusted(Uri uri) {
-        if ("https".equalsIgnoreCase(uri.getScheme())
-                && "appassets.androidplatform.net".equalsIgnoreCase(uri.getHost())) {
-            return true;
-        }
-        try {
-            URI configured = URI.create(BuildConfig.WEB_APP_URL);
-            return "https".equalsIgnoreCase(uri.getScheme())
-                    && configured.getHost() != null
-                    && configured.getHost().equalsIgnoreCase(uri.getHost());
-        } catch (Exception ignored) {
-            return false;
-        }
+        return "https".equalsIgnoreCase(uri.getScheme())
+                && "appassets.androidplatform.net".equalsIgnoreCase(uri.getHost());
     }
 
     @Override
@@ -230,6 +226,15 @@ public class MainActivity extends Activity {
             pendingGeoCallback = null;
             pendingGeoOrigin = null;
         }
+    }
+
+    public void deliverIntegrityResult(String requestId, String token, String error) {
+        if (webView == null) return;
+        String javascript = "window.CombusplusNative && window.CombusplusNative.resolveIntegrity(" +
+                JSONObject.quote(requestId == null ? "" : requestId) + "," +
+                JSONObject.quote(token == null ? "" : token) + "," +
+                JSONObject.quote(error == null ? "" : error) + ");";
+        webView.evaluateJavascript(javascript, null);
     }
 
     public void requestNotificationPermission() {

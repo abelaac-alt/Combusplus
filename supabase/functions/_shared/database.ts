@@ -66,6 +66,41 @@ export async function enforceRateLimit(
   return data === true;
 }
 
+export async function registerInstallation(input: {
+  installationHash: string;
+  platform: string;
+  appVersion: string;
+  integrityLevel: string;
+}): Promise<{ allowed: boolean; tokenVersion: number }> {
+  const { data, error } = await supabaseAdmin.rpc('combusplus_register_installation', {
+    p_installation_hash: input.installationHash,
+    p_platform: input.platform,
+    p_app_version: input.appVersion,
+    p_integrity_level: input.integrityLevel,
+  });
+  if (error) throw new Error(`No se pudo registrar la instalación: ${error.message}`);
+  const value = data && typeof data === 'object' ? data as Record<string, unknown> : {};
+  return {
+    allowed: value.allowed !== false,
+    tokenVersion: Math.max(1, Number(value.tokenVersion || 1)),
+  };
+}
+
+export async function logSecurityEvent(input: {
+  installationHash?: string;
+  eventType: string;
+  severity?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const { error } = await supabaseAdmin.rpc('combusplus_log_security_event', {
+    p_installation_hash: input.installationHash || null,
+    p_event_type: input.eventType.slice(0, 80),
+    p_severity: (input.severity || 'info').slice(0, 20),
+    p_metadata: input.metadata || {},
+  });
+  if (error) console.error('No se pudo registrar el evento de seguridad:', error.message);
+}
+
 export async function startSyncRun(
   source: string,
   pointsRequested: number,

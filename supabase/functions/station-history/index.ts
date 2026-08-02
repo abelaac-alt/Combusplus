@@ -1,14 +1,18 @@
-import { clientIdentity, jsonResponse, preflight, safeError } from '../_shared/security.ts';
 import { enforceRateLimit, stationHistory } from '../_shared/database.ts';
+import { requireDeviceSession } from '../_shared/session.ts';
+import { jsonResponse, preflight, requireTrustedOrigin, safeError } from '../_shared/security.ts';
 
 Deno.serve(async (req) => {
   const options = preflight(req);
   if (options) return options;
   if (req.method !== 'GET') return jsonResponse(req, { ok: false, error: 'Método no permitido.' }, 405);
-
+  const originError = requireTrustedOrigin(req);
+  if (originError) return originError;
+  const session = await requireDeviceSession(req);
+  if ('response' in session) return session.response;
 
   try {
-    const allowed = await enforceRateLimit(`${clientIdentity(req)}:history`, 60);
+    const allowed = await enforceRateLimit(`history:${session.payload.sub}`, 60, 60);
     if (!allowed) return jsonResponse(req, { ok: false, error: 'Demasiadas solicitudes.' }, 429);
 
     const url = new URL(req.url);
@@ -25,9 +29,7 @@ Deno.serve(async (req) => {
     const last = items[items.length - 1] as Record<string, unknown> | undefined;
     const firstPrice = Number(first?.price);
     const lastPrice = Number(last?.price);
-    const change = Number.isFinite(firstPrice) && Number.isFinite(lastPrice)
-      ? lastPrice - firstPrice
-      : 0;
+    const change = Number.isFinite(firstPrice) && Number.isFinite(lastPrice) ? lastPrice - firstPrice : 0;
 
     return jsonResponse(req, {
       ok: true,

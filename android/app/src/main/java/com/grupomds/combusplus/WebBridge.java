@@ -1,7 +1,5 @@
 package com.grupomds.combusplus;
 
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.webkit.JavascriptInterface;
 
 public class WebBridge {
@@ -11,11 +9,13 @@ public class WebBridge {
     public static final String LAST_LOCATION_AT = "combusplus.native.lastLocationAt";
 
     private final MainActivity activity;
+    private final PlayIntegrityProvider integrityProvider;
     private volatile boolean fullTankLaunch;
 
     public WebBridge(MainActivity activity, boolean fullTankLaunch) {
         this.activity = activity;
         this.fullTankLaunch = fullTankLaunch;
+        this.integrityProvider = new PlayIntegrityProvider(activity);
     }
 
     public void setFullTankLaunch(boolean value) {
@@ -40,7 +40,18 @@ public class WebBridge {
     }
 
     @JavascriptInterface
+    public void requestIntegrityToken(String requestId, String requestHash) {
+        if (requestId == null || requestId.length() > 120 || requestHash == null || requestHash.length() > 200) {
+            return;
+        }
+        integrityProvider.requestToken(requestHash, (token, error) ->
+                activity.runOnUiThread(() -> activity.deliverIntegrityResult(requestId, token, error))
+        );
+    }
+
+    @JavascriptInterface
     public void syncNotificationConfig(String json) {
+        if (json == null || json.length() > 250_000) return;
         PriceWatchScheduler.saveAndSchedule(activity, json);
         AppWidgetUpdater.updateAll(activity);
     }
@@ -49,37 +60,30 @@ public class WebBridge {
     public void saveLastLocation(double latitude, double longitude) {
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
         if (latitude < -90d || latitude > 90d || longitude < -180d || longitude > 180d) return;
-        activity.getSharedPreferences(CACHE_PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putLong(LAST_LATITUDE, Double.doubleToRawLongBits(latitude))
-                .putLong(LAST_LONGITUDE, Double.doubleToRawLongBits(longitude))
-                .putLong(LAST_LOCATION_AT, System.currentTimeMillis())
-                .apply();
+        SecureLocalStore.putString(activity, LAST_LATITUDE, Double.toString(latitude));
+        SecureLocalStore.putString(activity, LAST_LONGITUDE, Double.toString(longitude));
+        SecureLocalStore.putString(activity, LAST_LOCATION_AT, Long.toString(System.currentTimeMillis()));
     }
 
     @JavascriptInterface
     public void saveLocalValue(String key, String value) {
-        if (!isAllowedKey(key)) return;
-        activity.getSharedPreferences(CACHE_PREFS, Context.MODE_PRIVATE)
-                .edit().putString(key, value == null ? "" : value).apply();
+        if (!isAllowedKey(key) || (value != null && value.length() > 500_000)) return;
+        SecureLocalStore.putString(activity, key, value == null ? "" : value);
     }
 
     @JavascriptInterface
     public String getLocalValue(String key) {
         if (!isAllowedKey(key)) return "";
-        SharedPreferences prefs = activity.getSharedPreferences(CACHE_PREFS, Context.MODE_PRIVATE);
-        return prefs.getString(key, "");
+        return SecureLocalStore.getString(activity, key, "");
     }
 
     @JavascriptInterface
     public void removeLocalValue(String key) {
         if (!isAllowedKey(key)) return;
-        activity.getSharedPreferences(CACHE_PREFS, Context.MODE_PRIVATE).edit().remove(key).apply();
+        SecureLocalStore.remove(activity, key);
     }
 
     private boolean isAllowedKey(String key) {
-        return key != null
-                && key.startsWith("combusplus.")
-                && key.length() <= 120;
+        return key != null && key.startsWith("combusplus.") && key.length() <= 120;
     }
 }

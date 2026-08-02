@@ -5,7 +5,6 @@ import android.appwidget.AppWidgetManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.view.View;
 import android.widget.RemoteViews;
 
@@ -46,9 +45,8 @@ public final class AppWidgetUpdater {
         int[] changeIds = {R.id.favorite_change_1, R.id.favorite_change_2, R.id.favorite_change_3};
 
         JSONArray favorites = new JSONArray();
-        SharedPreferences prefs = context.getSharedPreferences(PriceWatchScheduler.PREFS, Context.MODE_PRIVATE);
         try {
-            JSONObject config = new JSONObject(prefs.getString(PriceWatchScheduler.CONFIG, "{}"));
+            JSONObject config = new JSONObject(SecureLocalStore.getString(context, PriceWatchScheduler.CONFIG, "{}"));
             JSONArray stored = config.optJSONArray("favorites");
             if (stored != null) favorites = stored;
         } catch (Exception ignored) {}
@@ -69,13 +67,11 @@ public final class AppWidgetUpdater {
             String priceKey = PriceWatchWorker.pricePreferenceKey(stationId, fuelKey);
             String changeKey = PriceWatchWorker.changePreferenceKey(stationId, fuelKey);
             double fallbackPrice = favorite.optDouble("lastPrice", Double.NaN);
-            double price = prefs.contains(priceKey)
-                    ? Double.longBitsToDouble(prefs.getLong(priceKey, 0L))
-                    : fallbackPrice;
+            String storedPrice = SecureLocalStore.getString(context, priceKey, "");
+            double price = storedPrice.isEmpty() ? fallbackPrice : parseDouble(storedPrice, fallbackPrice);
             double fallbackChange = favorite.optDouble("lastChange", 0d);
-            double change = prefs.contains(changeKey)
-                    ? Double.longBitsToDouble(prefs.getLong(changeKey, 0L))
-                    : fallbackChange;
+            String storedChange = SecureLocalStore.getString(context, changeKey, "");
+            double change = storedChange.isEmpty() ? fallbackChange : parseDouble(storedChange, fallbackChange);
 
             views.setTextViewText(nameIds[i], favorite.optString("name", "Gasolinera"));
             views.setTextViewText(priceIds[i], Double.isFinite(price) ? formatPrice(price) + " €/l" : "Pendiente");
@@ -113,6 +109,11 @@ public final class AppWidgetUpdater {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
+    }
+
+    private static double parseDouble(String value, double fallback) {
+        try { return Double.parseDouble(value); }
+        catch (Exception ignored) { return fallback; }
     }
 
     private static String formatPrice(double value) {

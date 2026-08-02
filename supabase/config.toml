@@ -18,13 +18,22 @@ port = 54323
 api_url = "http://127.0.0.1"
 
 [auth]
-enabled = true
+enabled = false
 site_url = "https://abelaac-alt.github.io/Combusplus/"
 additional_redirect_urls = [
   "https://abelaac-alt.github.io/Combusplus/",
   "https://appassets.androidplatform.net/assets/www/index.html"
 ]
-enable_signup = true
+enable_signup = false
+
+[functions.bootstrap]
+verify_jwt = false
+
+[functions.recommend]
+verify_jwt = false
+
+[functions.compare-stations]
+verify_jwt = false
 
 [functions.stations-nearby]
 verify_jwt = false

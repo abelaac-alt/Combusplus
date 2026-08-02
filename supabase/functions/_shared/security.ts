@@ -1,26 +1,34 @@
+import { sha256 } from './encoding.ts';
+
 export const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
+  'permissions-policy': 'geolocation=(), camera=(), microphone=()',
+  'cross-origin-resource-policy': 'same-site',
 };
 
 function allowedOrigins(): string[] {
   const configured = Deno.env.get('ALLOWED_ORIGINS') ||
     'https://abelaac-alt.github.io,https://appassets.androidplatform.net';
-  return configured
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+  return configured.split(',').map((value) => value.trim().replace(/\/$/, '')).filter(Boolean);
+}
+
+export function requestOrigin(req: Request): string {
+  return (req.headers.get('origin') || '').replace(/\/$/, '');
+}
+
+export function isAllowedOrigin(origin: string): boolean {
+  return !origin || allowedOrigins().includes(origin);
 }
 
 export function corsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get('origin') || '';
-  const allowed = allowedOrigins();
-  const selected = allowed.includes(origin) ? origin : allowed[0] || 'null';
+  const origin = requestOrigin(req);
+  const selected = origin && isAllowedOrigin(origin) ? origin : 'null';
   return {
     'access-control-allow-origin': selected,
     'access-control-allow-headers':
-      'authorization, apikey, content-type, x-combusplus-token, x-combusplus-sync',
+      'authorization, apikey, content-type, x-combusplus-session, x-combusplus-sync, x-installation-id, x-request-id',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-max-age': '86400',
     'vary': 'Origin',
@@ -35,60 +43,56 @@ export function jsonResponse(
 ): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...JSON_HEADERS,
-      ...corsHeaders(req),
-      'cache-control': cacheControl,
-    },
+    headers: { ...JSON_HEADERS, ...corsHeaders(req), 'cache-control': cacheControl },
   });
 }
 
 export function preflight(req: Request): Response | null {
   if (req.method !== 'OPTIONS') return null;
+  if (!isAllowedOrigin(requestOrigin(req))) {
+    return new Response(null, { status: 403, headers: corsHeaders(req) });
+  }
   return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
-  const encoder = new TextEncoder();
-  const aa = encoder.encode(a);
-  const bb = encoder.encode(b);
-  const length = Math.max(aa.length, bb.length, 1);
-  let diff = aa.length ^ bb.length;
-  for (let i = 0; i < length; i += 1) {
-    diff |= (aa[i % Math.max(aa.length, 1)] || 0) ^
-      (bb[i % Math.max(bb.length, 1)] || 0);
-  }
-  return diff === 0;
-}
-
-export function requireAppToken(req: Request): Response | null {
-  const required = (Deno.env.get('REQUIRE_APP_TOKEN') || 'true').toLowerCase() !== 'false';
-  if (!required) return null;
-  const expected = Deno.env.get('APP_ACCESS_TOKEN') || '';
-  const received = req.headers.get('x-combusplus-token') || '';
-  if (!expected || !received || !constantTimeEqual(expected, received)) {
-    return jsonResponse(req, { ok: false, error: 'Acceso no autorizado.' }, 401);
+export function requireTrustedOrigin(req: Request): Response | null {
+  const origin = requestOrigin(req);
+  if (origin && !isAllowedOrigin(origin)) {
+    return jsonResponse(req, { ok: false, error: 'Origen no autorizado.' }, 403);
   }
   return null;
+}
+
+export async function readJsonBody<T>(req: Request, maxBytes = 24_000): Promise<T> {
+  const declared = Number(req.headers.get('content-length') || 0);
+  if (declared > maxBytes) throw new Error('La solicitud es demasiado grande.');
+  const text = await req.text();
+  if (new TextEncoder().encode(text).length > maxBytes) throw new Error('La solicitud es demasiado grande.');
+  return (text ? JSON.parse(text) : {}) as T;
 }
 
 export function requireSyncToken(req: Request): Response | null {
   const expected = Deno.env.get('SYNC_SECRET') || '';
   const received = req.headers.get('x-combusplus-sync') || '';
-  if (!expected || !received || !constantTimeEqual(expected, received)) {
+  if (!expected || !received || expected.length !== received.length) {
     return jsonResponse(req, { ok: false, error: 'Sincronización no autorizada.' }, 401);
   }
+  let diff = 0;
+  for (let index = 0; index < expected.length; index += 1) diff |= expected.charCodeAt(index) ^ received.charCodeAt(index);
+  if (diff !== 0) return jsonResponse(req, { ok: false, error: 'Sincronización no autorizada.' }, 401);
   return null;
 }
 
-export function clientIdentity(req: Request): string {
-  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const realIp = req.headers.get('x-real-ip')?.trim();
-  const token = req.headers.get('x-combusplus-token') || 'public';
-  return `${forwarded || realIp || 'unknown'}:${token.slice(0, 16)}`;
+export async function rateIdentity(req: Request, scope: string, subject = ''): Promise<string> {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip')?.trim() || 'unknown';
+  const salt = Deno.env.get('RATE_LIMIT_SALT') || '';
+  return `${scope}:${await sha256(`${ip}|${subject}|${salt}`)}`;
 }
 
 export function safeError(error: unknown): string {
-  if (error instanceof Error) return error.message.slice(0, 500);
-  return 'Error interno.';
+  const expose = (Deno.env.get('EXPOSE_FUNCTION_ERRORS') || 'false').toLowerCase() === 'true';
+  if (expose && error instanceof Error) return error.message.slice(0, 300);
+  if (error instanceof SyntaxError) return 'La solicitud contiene JSON no válido.';
+  return 'No se pudo completar la operación.';
 }

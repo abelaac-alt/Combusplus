@@ -2,7 +2,6 @@ package com.grupomds.combusplus.car;
 
 import android.Manifest;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
@@ -10,6 +9,7 @@ import android.location.LocationManager;
 import androidx.core.content.ContextCompat;
 
 import com.grupomds.combusplus.BuildConfig;
+import com.grupomds.combusplus.SecureLocalStore;
 import com.grupomds.combusplus.WebBridge;
 
 import org.json.JSONArray;
@@ -20,18 +20,17 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 final class CarStationRepository {
     private static final String VEHICLES_KEY = "combusplus.v5.vehicles";
     private static final String SELECTED_VEHICLE_KEY = "combusplus.v5.selectedVehicle";
-    private static final double ROAD_FACTOR = 1.18d;
+    private static final String NATIVE_CONFIG_KEY = "notification_config";
 
     private CarStationRepository() {}
 
@@ -54,13 +53,36 @@ final class CarStationRepository {
             throw new IllegalStateException("El servidor de Combusplus no está configurado en la APK.");
         }
 
-        String url = base + "/stations-nearby"
-                + "?latitud=" + encodeNumber(origin.latitude)
-                + "&longitud=" + encodeNumber(origin.longitude)
-                + "&radio=" + encodeNumber(radiusKm)
-                + "&limite=" + Math.max(1, Math.min(limit, 50));
+        JSONObject nativeConfig = readNativeConfig(context);
+        String sessionToken = nativeConfig.optString("sessionToken", "");
+        String installationId = nativeConfig.optString("installationId", "");
+        long sessionExpiresAt = nativeConfig.optLong("sessionExpiresAt", 0L);
+        if (sessionToken.isEmpty() || installationId.isEmpty() || sessionExpiresAt <= System.currentTimeMillis()) {
+            throw new IllegalStateException("Abre Combusplus en el móvil para renovar la sesión segura.");
+        }
 
-        JSONObject response = requestJson(url, safe(BuildConfig.SUPABASE_PUBLISHABLE_KEY));
+        JSONObject request = new JSONObject();
+        request.put("latitude", origin.latitude);
+        request.put("longitude", origin.longitude);
+        request.put("radius", Math.max(1d, Math.min(radiusKm, 50d)));
+        request.put("limit", Math.max(1, Math.min(limit, 50)));
+        request.put("fuelKey", vehicle.fuelKey);
+        request.put("consumption", vehicle.consumption);
+        request.put("tankCapacity", vehicle.tankCapacity);
+        request.put("amount", 0d);
+        request.put("tripMode", "roundtrip");
+        request.put("fullTank", true);
+        request.put("discounts", nativeConfig.optJSONArray("discounts") == null
+                ? new JSONArray()
+                : nativeConfig.optJSONArray("discounts"));
+
+        JSONObject response = requestJson(
+                base + "/recommend",
+                request,
+                safe(BuildConfig.SUPABASE_PUBLISHABLE_KEY),
+                sessionToken,
+                installationId
+        );
         if (!response.optBoolean("ok", false)) {
             throw new IOException(response.optString("error", "No se pudieron cargar las gasolineras."));
         }
@@ -68,68 +90,63 @@ final class CarStationRepository {
         JSONArray items = response.optJSONArray("items");
         List<Station> stations = new ArrayList<>();
         if (items != null) {
-            for (int i = 0; i < items.length(); i++) {
-                JSONObject item = items.optJSONObject(i);
-                Station station = parseStation(item, vehicle);
+            for (int index = 0; index < items.length(); index++) {
+                Station station = parseStation(items.optJSONObject(index));
                 if (station != null) stations.add(station);
             }
         }
-        stations.sort(Comparator
-                .comparingDouble((Station station) -> station.effectivePrice)
-                .thenComparingDouble(station -> station.distanceKm));
         return new Result(vehicle, origin, stations);
     }
 
-    private static Station parseStation(JSONObject item, Vehicle vehicle) {
+    private static Station parseStation(JSONObject item) {
         if (item == null) return null;
-        double latitude = item.optDouble("latitud", Double.NaN);
-        double longitude = item.optDouble("longitud", Double.NaN);
-        double distanceKm = item.optDouble("distancia", Double.NaN);
-        double price = item.optDouble(vehicle.fuelKey, Double.NaN);
-        if (!Double.isFinite(latitude) || !Double.isFinite(longitude)
+        double latitude = item.optDouble("latitude", Double.NaN);
+        double longitude = item.optDouble("longitude", Double.NaN);
+        double distanceKm = item.optDouble("distanceKm", Double.NaN);
+        double price = item.optDouble("price", Double.NaN);
+        double tankCost = item.optDouble("tankCost", Double.NaN);
+        double tripLiters = item.optDouble("tripLiters", Double.NaN);
+        double usefulLiters = item.optDouble("netLiters", Double.NaN);
+        double effectivePrice = item.optDouble("effectivePrice", Double.NaN);
+        if (!validCoordinates(latitude, longitude)
                 || !Double.isFinite(distanceKm) || distanceKm < 0d
-                || !Double.isFinite(price) || price <= 0d || price >= 10d) {
+                || !Double.isFinite(price) || price <= 0d
+                || !Double.isFinite(tankCost) || tankCost <= 0d
+                || !Double.isFinite(usefulLiters) || usefulLiters <= 0d
+                || !Double.isFinite(effectivePrice) || effectivePrice <= 0d) {
             return null;
         }
-
-        double roadDistance = distanceKm * ROAD_FACTOR;
-        double roundTripKm = roadDistance * 2d;
-        double tripLiters = roundTripKm * vehicle.consumption / 100d;
-        double usefulLiters = vehicle.tankCapacity - tripLiters;
-        if (usefulLiters <= 0d) return null;
-        double tankCost = vehicle.tankCapacity * price;
-        double effectivePrice = tankCost / usefulLiters;
-
-        String name = firstNonBlank(item.optString("rotulo"), item.optString("marca"), "Gasolinera");
-        String address = joinAddress(
-                item.optString("direccion"),
-                item.optString("localidad"),
-                item.optString("provincia")
-        );
         return new Station(
-                item.optString("idEstacion", name + "-" + latitude + "-" + longitude),
-                name,
-                address,
+                item.optString("id", item.optString("name", "Gasolinera")),
+                firstNonBlank(item.optString("name"), "Gasolinera"),
+                firstNonBlank(item.optString("address"), "Dirección no disponible"),
                 latitude,
                 longitude,
                 distanceKm,
                 price,
                 tankCost,
-                tripLiters,
+                Double.isFinite(tripLiters) ? tripLiters : 0d,
                 usefulLiters,
                 effectivePrice
         );
     }
 
+    private static JSONObject readNativeConfig(Context context) {
+        try {
+            return new JSONObject(SecureLocalStore.getString(context, NATIVE_CONFIG_KEY, "{}"));
+        } catch (JSONException ignored) {
+            return new JSONObject();
+        }
+    }
+
     private static Vehicle readSelectedVehicle(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(WebBridge.CACHE_PREFS, Context.MODE_PRIVATE);
-        String raw = prefs.getString(VEHICLES_KEY, "[]");
-        String selectedId = prefs.getString(SELECTED_VEHICLE_KEY, "");
+        String raw = SecureLocalStore.getString(context, VEHICLES_KEY, "[]");
+        String selectedId = SecureLocalStore.getString(context, SELECTED_VEHICLE_KEY, "");
         try {
             JSONArray vehicles = new JSONArray(raw == null ? "[]" : raw);
             JSONObject selected = null;
-            for (int i = 0; i < vehicles.length(); i++) {
-                JSONObject candidate = vehicles.optJSONObject(i);
+            for (int index = 0; index < vehicles.length(); index++) {
+                JSONObject candidate = vehicles.optJSONObject(index);
                 if (candidate == null) continue;
                 if (selected == null) selected = candidate;
                 if (!selectedId.isEmpty() && selectedId.equals(candidate.optString("id"))) {
@@ -151,10 +168,11 @@ final class CarStationRepository {
     }
 
     private static Coordinates readCoordinates(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(WebBridge.CACHE_PREFS, Context.MODE_PRIVATE);
-        if (prefs.contains(WebBridge.LAST_LATITUDE) && prefs.contains(WebBridge.LAST_LONGITUDE)) {
-            double latitude = Double.longBitsToDouble(prefs.getLong(WebBridge.LAST_LATITUDE, 0L));
-            double longitude = Double.longBitsToDouble(prefs.getLong(WebBridge.LAST_LONGITUDE, 0L));
+        String latitudeText = SecureLocalStore.getString(context, WebBridge.LAST_LATITUDE, "");
+        String longitudeText = SecureLocalStore.getString(context, WebBridge.LAST_LONGITUDE, "");
+        if (!latitudeText.isEmpty() && !longitudeText.isEmpty()) {
+            double latitude = parseDouble(latitudeText, Double.NaN);
+            double longitude = parseDouble(longitudeText, Double.NaN);
             if (validCoordinates(latitude, longitude)) return new Coordinates(latitude, longitude);
         }
 
@@ -181,24 +199,37 @@ final class CarStationRepository {
         return new Coordinates(newest.getLatitude(), newest.getLongitude());
     }
 
-    private static JSONObject requestJson(String urlText, String publishableKey) throws IOException, JSONException {
+    private static JSONObject requestJson(
+            String urlText,
+            JSONObject body,
+            String publishableKey,
+            String sessionToken,
+            String installationId
+    ) throws IOException, JSONException {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod("GET");
+        connection.setRequestMethod("POST");
         connection.setConnectTimeout(12_000);
         connection.setReadTimeout(18_000);
+        connection.setDoOutput(true);
         connection.setRequestProperty("Accept", "application/json");
-        if (!publishableKey.isEmpty()) {
-            connection.setRequestProperty("apikey", publishableKey);
-            connection.setRequestProperty("Authorization", "Bearer " + publishableKey);
+        connection.setRequestProperty("Content-Type", "application/json");
+        connection.setRequestProperty("User-Agent", "CombusplusAndroidAuto/8.0");
+        if (!publishableKey.isEmpty()) connection.setRequestProperty("apikey", publishableKey);
+        connection.setRequestProperty("X-Combusplus-Session", sessionToken);
+        connection.setRequestProperty("X-Installation-Id", installationId);
+        byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+        connection.setFixedLengthStreamingMode(payload.length);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(payload);
         }
         int status = connection.getResponseCode();
         InputStream stream = status >= 200 && status < 300
                 ? connection.getInputStream()
                 : connection.getErrorStream();
-        String body = readStream(stream);
+        String responseBody = readStream(stream);
         connection.disconnect();
-        if (body.isEmpty()) throw new IOException("El servidor no devolvió información.");
-        JSONObject json = new JSONObject(body);
+        if (responseBody.isEmpty()) throw new IOException("El servidor no devolvió información.");
+        JSONObject json = new JSONObject(responseBody);
         if (status < 200 || status >= 300) {
             throw new IOException(json.optString("error", "Error del servidor (" + status + ")."));
         }
@@ -216,24 +247,15 @@ final class CarStationRepository {
         return builder.toString();
     }
 
-    private static String encodeNumber(double value) {
-        return String.format(Locale.US, "%.6f", value);
+    private static double parseDouble(String value, double fallback) {
+        try { return Double.parseDouble(value); }
+        catch (Exception ignored) { return fallback; }
     }
 
     private static boolean validCoordinates(double latitude, double longitude) {
         return Double.isFinite(latitude) && Double.isFinite(longitude)
                 && latitude >= -90d && latitude <= 90d
                 && longitude >= -180d && longitude <= 180d;
-    }
-
-    private static String joinAddress(String... parts) {
-        StringBuilder builder = new StringBuilder();
-        for (String part : parts) {
-            if (part == null || part.trim().isEmpty()) continue;
-            if (builder.length() > 0) builder.append(", ");
-            builder.append(part.trim());
-        }
-        return builder.length() == 0 ? "Dirección no disponible" : builder.toString();
     }
 
     private static String firstNonBlank(String... values) {
