@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#111214">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://maps.gstatic.com https://maps.googleapis.com https://*.googleusercontent.com https://*.ggpht.com; connect-src 'self' https://*.supabase.co https://maps.googleapis.com https://maps.gstatic.com; frame-src https://www.openstreetmap.org; font-src 'self' data: https://fonts.gstatic.com; upgrade-insecure-requests">
   <meta name="description" content="Combusplus encuentra la gasolinera que más te conviene según tu vehículo, el importe del repostaje, la distancia y el precio del combustible.">
   <title>Combusplus</title>
   <link rel="manifest" href="./manifest.webmanifest">
@@ -251,6 +252,7 @@
     <form class="dialog-panel" id="settingsForm">
       <div class="dialog-title sticky-dialog-title"><div><span class="eyebrow">CONFIGURACIÓN</span><h2>Ajustes</h2></div><button class="dialog-close inline" data-close-dialog="settingsDialog" type="button">×</button></div>
       <fieldset><legend>Notificaciones</legend><label class="check-row"><input id="notificationsEnabled" type="checkbox"><span>Avisar de cambios de precio en favoritas</span></label><div class="field-grid"><label class="field"><span>Comprobar cada</span><select id="notificationInterval"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6" selected>6 horas</option><option value="12">12 horas</option><option value="24">24 horas</option></select></label><label class="field"><span>Cambio mínimo</span><div class="input-unit"><input id="notificationThreshold" type="number" min="0.001" max="1" step="0.001" value="0.001"><em>€/l</em></div></label><label class="field"><span>Notificar</span><select id="notificationDirection"><option value="both">Subidas y bajadas</option><option value="down">Solo bajadas</option><option value="up">Solo subidas</option></select></label></div><button class="secondary-btn" id="requestNotifications" type="button">Conceder permiso</button></fieldset>
+      <p class="privacy-note">Tus vehículos, favoritas, descuentos y repostajes se guardan localmente en este dispositivo. <a href="./privacy.html" target="_blank" rel="noopener noreferrer">Política de privacidad</a></p>
       <p id="settingsError" class="form-error" hidden></p><button class="primary-btn dialog-save" type="submit">Guardar ajustes</button>
     </form>
   </dialog>

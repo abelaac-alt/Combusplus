@@ -1,31 +1,21 @@
-# Seguridad de Combusplus 7.0
+# Política de seguridad
 
-## Secretos que nunca deben publicarse
+No publiques incidencias que contengan claves, tokens, contraseñas, archivos de firma o datos personales.
 
-- `SUPABASE_ACCESS_TOKEN`
-- `SUPABASE_DB_PASSWORD`
-- `PRECIOIL_API_KEY`
-- `COMBUSPLUS_APP_ACCESS_TOKEN`
-- `COMBUSPLUS_SYNC_SECRET`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- firma y contraseñas de Android
+## Secretos que nunca deben estar en Git
 
-## Datos públicos aceptables
+- clave privada de Precioil;
+- `SUPABASE_SERVICE_ROLE_KEY`;
+- contraseña de base de datos;
+- token personal de Supabase;
+- `COMBUSPLUS_SYNC_SECRET`;
+- `COMBUSPLUS_DEVICE_TOKEN_SECRET`;
+- `COMBUSPLUS_RATE_LIMIT_SALT`;
+- cuenta de servicio de Play Integrity;
+- keystore y contraseñas Android.
 
-- URL de las Edge Functions
-- clave `sb_publishable_...` de Supabase
-- clave de Google Maps restringida a los dominios autorizados
+## Comunicación de vulnerabilidades
 
-## Límites reales
+Antes de publicar, sustituye este apartado por un correo privado de seguridad del responsable. Incluye versión, pasos de reproducción e impacto, pero nunca datos reales de usuarios.
 
-La clave privada de Precioil queda oculta en Supabase. La dirección pública de una Edge Function no puede ocultarse: debe protegerse mediante validación, rate limiting, RLS, CORS y, durante la beta privada, `X-Combusplus-Token`.
-
-Una clave de Google Maps usada por JavaScript es visible para el navegador. Debe restringirse por referente HTTP y limitarse exclusivamente a Maps JavaScript API.
-
-## Respuesta a incidentes
-
-1. Revoca la clave comprometida.
-2. Genera una nueva.
-3. Actualiza el secreto en GitHub y Supabase.
-4. Ejecuta `Desplegar Supabase`.
-5. Revisa los logs de Edge Functions y `private.sync_runs`.
+Consulta [docs/SECURITY_V8.md](docs/SECURITY_V8.md) para el modelo técnico completo.

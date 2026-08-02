@@ -23,7 +23,10 @@ const STORAGE = {
   discounts: 'combusplus.v5.discounts',
   history: 'combusplus.v5.history',
   snapshots: 'combusplus.v5.snapshots',
-  filters: 'combusplus.v5.filters'
+  filters: 'combusplus.v5.filters',
+  installationId: 'combusplus.v8.installationId',
+  sessionToken: 'combusplus.v8.sessionToken',
+  sessionExpiresAt: 'combusplus.v8.sessionExpiresAt'
 };
 
 const DEFAULT_SETTINGS = {
@@ -64,7 +67,12 @@ const state = {
   currentSimulation: null,
   map: null,
   markers: [],
-  mapsPromise: null
+  mapsPromise: null,
+  backendSession: {
+    token: '',
+    expiresAt: 0,
+    promise: null
+  }
 };
 
 const $ = selector => document.querySelector(selector);
@@ -428,7 +436,7 @@ function closeDialog(dialog) {
 
 function apiEndpoint(path, params = '') {
   const base = String(state.settings.supabaseFunctionsUrl || '').replace(/\/$/, '');
-  if (!base) throw new Error('Configura la URL del servidor Supabase.');
+  if (!base) throw new Error('El servidor de Combusplus no está configurado.');
   const functionName = path.includes('estaciones') || path.includes('stations-nearby')
     ? 'stations-nearby'
     : path.replace(/^\//, '');
@@ -436,25 +444,164 @@ function apiEndpoint(path, params = '') {
   return `${base}/${functionName}${query ? `?${query}` : ''}`;
 }
 
-function apiHeaders() {
-  const headers = { Accept: 'application/json' };
-  const publishable = String(state.settings.supabasePublishableKey || '').trim();
-  if (publishable) {
-    headers.apikey = publishable;
-    headers.Authorization = `Bearer ${publishable}`;
+function randomInstallationId() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function installationId() {
+  let value = readStoredValue(STORAGE.installationId) || '';
+  if (!/^[A-Za-z0-9_-]{32,160}$/.test(value)) {
+    value = randomInstallationId();
+    writeStoredValue(STORAGE.installationId, value);
   }
+  return value;
+}
+
+async function sha256Base64Url(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  const bytes = new Uint8Array(digest);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+const nativeIntegrityCallbacks = new Map();
+window.CombusplusNative = window.CombusplusNative || {};
+window.CombusplusNative.resolveIntegrity = (requestId, token, error) => {
+  const callback = nativeIntegrityCallbacks.get(String(requestId));
+  if (!callback) return;
+  nativeIntegrityCallbacks.delete(String(requestId));
+  if (error) callback.reject(new Error(String(error)));
+  else callback.resolve(String(token || ''));
+};
+
+function requestNativeIntegrityToken(requestHash) {
+  if (!isNative() || !window.AndroidBridge?.requestIntegrityToken) return Promise.resolve('');
+  const requestId = uid('integrity');
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      nativeIntegrityCallbacks.delete(requestId);
+      resolve('');
+    }, 20_000);
+    nativeIntegrityCallbacks.set(requestId, {
+      resolve: value => { clearTimeout(timeout); resolve(value); },
+      reject: error => { clearTimeout(timeout); reject(error); }
+    });
+    try { window.AndroidBridge.requestIntegrityToken(requestId, requestHash); }
+    catch (error) {
+      clearTimeout(timeout);
+      nativeIntegrityCallbacks.delete(requestId);
+      resolve('');
+    }
+  });
+}
+
+function clearBackendSession() {
+  state.backendSession.token = '';
+  state.backendSession.expiresAt = 0;
+  removeStoredValue(STORAGE.sessionToken);
+  removeStoredValue(STORAGE.sessionExpiresAt);
+}
+
+async function ensureBackendSession(force = false) {
+  const now = Date.now();
+  const storedToken = readStoredValue(STORAGE.sessionToken) || '';
+  const storedExpiry = Number(readStoredValue(STORAGE.sessionExpiresAt) || 0);
+  if (!force && storedToken && storedExpiry > now + 5 * 60_000) {
+    state.backendSession.token = storedToken;
+    state.backendSession.expiresAt = storedExpiry;
+    return storedToken;
+  }
+  if (!force && state.backendSession.promise) return state.backendSession.promise;
+
+  state.backendSession.promise = (async () => {
+    const id = installationId();
+    const platform = isNative() ? 'android' : 'web';
+    const requestHash = await sha256Base64Url(`${id}|${platform}|${Math.floor(Date.now() / 300000)}`);
+    let integrityToken = '';
+    try { integrityToken = await requestNativeIntegrityToken(requestHash); }
+    catch { integrityToken = ''; }
+
+    const url = apiEndpoint('bootstrap');
+    const publishable = String(state.settings.supabasePublishableKey || '').trim();
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(publishable ? { apikey: publishable } : {})
+        },
+        body: JSON.stringify({
+          installationId: id,
+          platform,
+          appVersion: String(RUNTIME_CONFIG.version || '8.0.0'),
+          requestHash,
+          integrityToken: integrityToken || undefined
+        })
+      });
+    } catch {
+      throw new Error('No se pudo iniciar una sesión segura con Combusplus.');
+    }
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.sessionToken) {
+      throw new Error(payload?.error || 'El servidor no pudo autorizar esta instalación.');
+    }
+    const expiresAt = Date.parse(payload.expiresAt || '') || Date.now() + 24 * 60 * 60_000;
+    state.backendSession.token = payload.sessionToken;
+    state.backendSession.expiresAt = expiresAt;
+    writeStoredValue(STORAGE.sessionToken, payload.sessionToken);
+    writeStoredValue(STORAGE.sessionExpiresAt, String(expiresAt));
+    return payload.sessionToken;
+  })();
+
+  try { return await state.backendSession.promise; }
+  finally { state.backendSession.promise = null; }
+}
+
+async function apiHeaders() {
+  const sessionToken = await ensureBackendSession();
+  const headers = {
+    Accept: 'application/json',
+    'X-Combusplus-Session': sessionToken,
+    'X-Installation-Id': installationId()
+  };
+  const publishable = String(state.settings.supabasePublishableKey || '').trim();
+  if (publishable) headers.apikey = publishable;
   return headers;
 }
 
-async function apiFetch(path, params) {
+async function apiFetch(path, params = '', options = {}, retry = true) {
   const url = apiEndpoint(path, params);
+  const method = String(options.method || 'GET').toUpperCase();
+  const headers = await apiHeaders();
+  if (method !== 'GET') headers['Content-Type'] = 'application/json';
   let response;
-  try { response = await fetch(url, { headers: apiHeaders(), cache: 'no-store' }); }
-  catch { throw new Error('No se pudo conectar con el servidor seguro de precios.'); }
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      cache: 'no-store',
+      body: method === 'GET' ? undefined : JSON.stringify(options.body || {})
+    });
+  } catch {
+    throw new Error('No se pudo conectar con el servidor seguro de precios.');
+  }
   let payload = null;
   try { payload = await response.json(); } catch { /* sin cuerpo JSON */ }
+  if (response.status === 401 && retry) {
+    clearBackendSession();
+    await ensureBackendSession(true);
+    return apiFetch(path, params, options, false);
+  }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error('El servidor ha rechazado la solicitud.');
+    if (response.status === 401 || response.status === 403) throw new Error(payload?.error || 'El servidor ha rechazado la solicitud.');
     throw new Error(payload?.message || payload?.error || `Error ${response.status} al consultar precios.`);
   }
   return payload;
@@ -562,6 +709,36 @@ function validateSearch(input) {
   return '';
 }
 
+function recommendationRequest(input, selectedStationId = '') {
+  if (!state.position) throw new Error('La ubicación todavía no está disponible.');
+  return {
+    latitude: state.position.latitude,
+    longitude: state.position.longitude,
+    radius: input.radius,
+    limit: 100,
+    fuelKey: input.fuelKey,
+    consumption: input.consumption,
+    amount: input.amount,
+    tankCapacity: input.tankCapacity,
+    tripMode: input.tripMode,
+    fullTank: Boolean(input.fullTank),
+    discounts: state.discounts,
+    selectedStationId: selectedStationId || undefined
+  };
+}
+
+async function fetchRecommendation(input) {
+  await requestPosition();
+  const payload = await apiFetch('recommend', '', {
+    method: 'POST',
+    body: recommendationRequest(input)
+  });
+  state.stations = Array.isArray(payload.items) ? payload.items : [];
+  recordSnapshots(state.stations);
+  if (!payload.best) throw new Error('No hay gasolineras compatibles dentro del radio seleccionado.');
+  return payload;
+}
+
 async function executeSearch(event) {
   event?.preventDefault();
   clearError(el.quickSearchError);
@@ -572,17 +749,15 @@ async function executeSearch(event) {
   syncSearchControls(input);
   el.quickSearchButton.disabled = true;
   el.quickSearchButton.querySelector('span').textContent = input.fullTank ? 'Calculando el depósito completo…' : 'Buscando la mejor opción…';
-  el.stationList.innerHTML = '<div class="loading">Comparando precios y distancias…</div>';
+  el.stationList.innerHTML = '<div class="loading">Comparando precios, distancia y consumo del trayecto…</div>';
   el.bestResult.hidden = true;
 
   try {
-    await fetchStations(input.radius);
-    const ranked = input.fullTank ? rankFullTankStations(state.stations, input) : rankNormalizedStations(state.stations, input);
-    if (!ranked.length) throw new Error('No hay gasolineras con precio para este combustible dentro del radio seleccionado.');
-    const best = ranked[0];
-    const nearest = [...ranked].sort((a, b) => a.distanceKm - b.distanceKm)[0];
-    const saving = equivalentSaving(best, nearest);
-    if (input.fullTank) input.amount = best.tankCost;
+    const payload = await fetchRecommendation(input);
+    const best = payload.best;
+    const nearest = payload.nearest || best;
+    const saving = Number(payload.saving || 0);
+    if (input.fullTank) input.amount = Number(best.tankCost || input.tankCapacity * best.price);
     state.currentSimulation = {
       best,
       nearest,
@@ -591,7 +766,8 @@ async function executeSearch(event) {
       mode: input.fullTank ? 'fullTank' : 'amount',
       radius: input.radius,
       vehicleId: input.vehicleId,
-      registered: false
+      registered: false,
+      serverCalculated: true
     };
     renderBestResult();
     renderStations();
@@ -607,7 +783,7 @@ async function executeSearch(event) {
   }
 }
 
-async function runFullTankSearch({ openRoute = true } = {}) {
+async function runFullTankSearch({ openRoute = false } = {}) {
   clearError(el.quickSearchError);
   const vehicle = activeVehicle();
   if (!vehicle || !Number.isFinite(Number(vehicle.tank)) || Number(vehicle.tank) <= 0) {
@@ -627,26 +803,28 @@ async function runFullTankSearch({ openRoute = true } = {}) {
     discounts: state.discounts,
     fullTank: true
   };
-  if (!Number.isFinite(input.consumption) || input.consumption <= 0) {
-    toast('Revisa el consumo del vehículo.');
+  const error = validateSearch(input);
+  if (error) {
+    toast(error);
     openVehicleDialog(vehicle);
     return;
   }
 
   syncSearchControls({ ...input, amount: state.filters.amount || 50 });
-  el.fullTankButton.disabled = true;
-  el.fullTankButton.querySelector('span').textContent = 'Calculando la mejor ruta…';
+  if (el.fullTankButton) {
+    el.fullTankButton.disabled = true;
+    const label = el.fullTankButton.querySelector('span');
+    if (label) label.textContent = 'Calculando la mejor opción…';
+  }
   el.stationList.innerHTML = '<div class="loading">Comparando el coste del depósito y del desplazamiento…</div>';
   el.bestResult.hidden = true;
 
   try {
-    await fetchStations(input.radius);
-    const ranked = rankFullTankStations(state.stations, input);
-    if (!ranked.length) throw new Error('No hay gasolineras válidas para llenar el depósito dentro del radio seleccionado.');
-    const best = ranked[0];
-    const nearest = [...ranked].sort((a, b) => a.distanceKm - b.distanceKm)[0];
-    const saving = equivalentSaving(best, nearest);
-    input.amount = best.tankCost;
+    const payload = await fetchRecommendation(input);
+    const best = payload.best;
+    const nearest = payload.nearest || best;
+    const saving = Number(payload.saving || 0);
+    input.amount = Number(best.tankCost || input.tankCapacity * best.price);
     state.currentSimulation = {
       best,
       nearest,
@@ -655,22 +833,24 @@ async function runFullTankSearch({ openRoute = true } = {}) {
       mode: 'fullTank',
       radius: input.radius,
       vehicleId: vehicle.id,
-      registered: false
+      registered: false,
+      serverCalculated: true
     };
     renderBestResult();
     renderStations();
     renderMapPreview();
     await checkFavoritePrices(false);
     el.bestResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (openRoute) {
-      window.setTimeout(() => { window.location.href = mapsUrl(best); }, 250);
-    }
-  } catch (error) {
-    el.stationList.replaceChildren(emptyState(error.message));
-    showError(el.quickSearchError, error.message);
+    if (openRoute) window.setTimeout(() => { window.location.href = mapsUrl(best); }, 250);
+  } catch (searchError) {
+    el.stationList.replaceChildren(emptyState(searchError.message));
+    showError(el.quickSearchError, searchError.message);
   } finally {
-    el.fullTankButton.disabled = false;
-    el.fullTankButton.querySelector('span').textContent = 'Buscar y abrir la ruta';
+    if (el.fullTankButton) {
+      el.fullTankButton.disabled = false;
+      const label = el.fullTankButton.querySelector('span');
+      if (label) label.textContent = 'Buscar la mejor gasolinera';
+    }
   }
 }
 
@@ -716,7 +896,7 @@ function renderBestResult() {
   el.bestResult.hidden = false;
 }
 
-function openComparison(selectedStation) {
+async function openComparison(selectedStation) {
   const simulation = state.currentSimulation;
   if (!simulation?.best) {
     toast('Realiza primero una búsqueda para calcular la mejor opción.');
@@ -724,43 +904,48 @@ function openComparison(selectedStation) {
   }
 
   const input = { ...simulation.input, discounts: state.discounts };
-  const selected = rankStations([selectedStation], input)[0];
-  const best = simulation.best;
-  if (!selected) {
-    toast('Esta gasolinera no tiene un precio válido para la comparación actual.');
-    return;
+  try {
+    await requestPosition();
+    const payload = await apiFetch('compare-stations', '', {
+      method: 'POST',
+      body: recommendationRequest(input, selectedStation.id)
+    });
+    const comparison = payload.comparison;
+    if (!comparison?.best || !comparison?.selected) throw new Error('No se pudo comparar esa gasolinera.');
+    const { best, selected } = comparison;
+    const saving = Number(comparison.saving || 0);
+    const extraUsefulLiters = Number(comparison.extraUsefulLiters || 0);
+    const referenceLiters = Number(comparison.referenceLiters || best.netLiters || 0);
+    const tripLabel = input.tripMode === 'oneway' ? 'solo ida' : 'ida y vuelta';
+    const bestEquivalentCost = Number(best.effectivePrice) * referenceLiters;
+    const selectedEquivalentCost = Number(selected.effectivePrice) * referenceLiters;
+
+    el.compareBestName.textContent = best.name;
+    el.compareBestPrice.textContent = `${num(best.price)} €/l`;
+    el.compareBestTrip.textContent = `${num(best.tripKm, 1)} km · ${tripLabel}`;
+    el.compareBestTripFuel.textContent = `${num(best.tripLiters, 2)} l`;
+    el.compareBestCost.textContent = euro.format(bestEquivalentCost);
+
+    el.compareSelectedName.textContent = selected.name;
+    el.compareSelectedPrice.textContent = `${num(selected.price)} €/l`;
+    el.compareSelectedTrip.textContent = `${num(selected.tripKm, 1)} km · ${tripLabel}`;
+    el.compareSelectedTripFuel.textContent = `${num(selected.tripLiters, 2)} l`;
+    el.compareSelectedCost.textContent = euro.format(selectedEquivalentCost);
+
+    el.compareSaving.textContent = euro.format(saving);
+    if (String(best.id) === String(selected.id)) {
+      el.compareSavingCopy.textContent = 'La gasolinera seleccionada ya es la mejor opción por precio y desplazamiento.';
+    } else {
+      const modeCopy = simulation.mode === 'fullTank'
+        ? 'para obtener la misma cantidad útil tras llenar el depósito'
+        : `para obtener los mismos ${num(referenceLiters, 2)} litros útiles`;
+      el.compareSavingCopy.textContent = `Ahorras ${euro.format(saving)} ${modeCopy}. Además aprovechas ${num(extraUsefulLiters, 2)} litros útiles más con el mismo criterio de búsqueda.`;
+    }
+    el.compareBestRoute.href = mapsUrl(best);
+    openDialog(el.comparisonDialog);
+  } catch (error) {
+    toast(error.message || 'No se pudo realizar la comparación.');
   }
-
-  const referenceLiters = Number(best.netLiters);
-  const bestEquivalentCost = Number(best.effectivePrice) * referenceLiters;
-  const selectedEquivalentCost = Number(selected.effectivePrice) * referenceLiters;
-  const saving = Math.max(0, selectedEquivalentCost - bestEquivalentCost);
-  const extraUsefulLiters = Math.max(0, Number(best.netLiters) - Number(selected.netLiters));
-  const tripLabel = input.tripMode === 'oneway' ? 'solo ida' : 'ida y vuelta';
-
-  el.compareBestName.textContent = best.name;
-  el.compareBestPrice.textContent = `${num(best.price)} €/l`;
-  el.compareBestTrip.textContent = `${num(best.tripKm, 1)} km · ${tripLabel}`;
-  el.compareBestTripFuel.textContent = `${num(best.tripLiters, 2)} l`;
-  el.compareBestCost.textContent = euro.format(bestEquivalentCost);
-
-  el.compareSelectedName.textContent = selected.name;
-  el.compareSelectedPrice.textContent = `${num(selected.price)} €/l`;
-  el.compareSelectedTrip.textContent = `${num(selected.tripKm, 1)} km · ${tripLabel}`;
-  el.compareSelectedTripFuel.textContent = `${num(selected.tripLiters, 2)} l`;
-  el.compareSelectedCost.textContent = euro.format(selectedEquivalentCost);
-
-  el.compareSaving.textContent = euro.format(saving);
-  if (String(best.id) === String(selected.id)) {
-    el.compareSavingCopy.textContent = 'La gasolinera seleccionada ya es la mejor opción por precio y desplazamiento.';
-  } else {
-    const modeCopy = simulation.mode === 'fullTank'
-      ? 'para obtener la misma cantidad útil tras llenar el depósito'
-      : `para obtener los mismos ${num(referenceLiters, 2)} litros útiles`;
-    el.compareSavingCopy.textContent = `Ahorras ${euro.format(saving)} ${modeCopy}. Además aprovechas ${num(extraUsefulLiters, 2)} litros útiles más con el mismo criterio de búsqueda.`;
-  }
-  el.compareBestRoute.href = mapsUrl(best);
-  openDialog(el.comparisonDialog);
 }
 
 function renderStations() {
@@ -1483,8 +1668,12 @@ function syncNativeConfig() {
     direction: state.settings.notificationDirection,
     supabaseFunctionsUrl: state.settings.supabaseFunctionsUrl,
     supabasePublishableKey: state.settings.supabasePublishableKey,
+    installationId: installationId(),
+    sessionToken: state.backendSession.token || readStoredValue(STORAGE.sessionToken) || '',
+    sessionExpiresAt: Number(state.backendSession.expiresAt || readStoredValue(STORAGE.sessionExpiresAt) || 0),
     selectedVehicleId: state.selectedVehicleId,
     vehicles: state.vehicles,
+    discounts: state.discounts,
     favorites: state.favorites.map(favorite => ({
       id: favorite.id,
       name: favorite.name,
@@ -1526,6 +1715,7 @@ function exportData() {
   const blob = new Blob([JSON.stringify({
     exportedAt: nowIso(),
     vehicles: state.vehicles,
+    discounts: state.discounts,
     favorites: state.favorites,
     discounts: state.discounts,
     history: state.history,
@@ -1669,6 +1859,9 @@ function init() {
   navigate(location.hash.slice(1) || 'list');
   window.addEventListener('hashchange', () => navigate(location.hash.slice(1) || 'list'));
   syncNativeConfig();
+  ensureBackendSession().then(() => syncNativeConfig()).catch(error => {
+    console.error('No se pudo iniciar la sesión segura:', error);
+  });
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   setTimeout(() => checkFavoritePrices(true), 1200);
   if (!state.settings.supabaseFunctionsUrl || !state.settings.supabasePublishableKey) {

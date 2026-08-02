@@ -207,3 +207,5 @@ html,body,.app-shell,main,.page{overscroll-behavior-x:none;touch-action:pan-y}
 .comparison-saving small{color:#d8dbe2;line-height:1.45}
 .comparison-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}.comparison-actions>*{flex:1 1 220px;text-align:center}
 @media(max-width:680px){.comparison-panel{padding:20px 16px}.comparison-grid{grid-template-columns:1fr}.comparison-card{padding:15px}.comparison-actions{display:grid}.comparison-actions>*{width:100%}}
+
+.privacy-note{font-size:.86rem;line-height:1.5;color:#5f6570;margin:14px 0}.privacy-note a{color:#a40f18;font-weight:750}
