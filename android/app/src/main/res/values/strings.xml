@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">Combusplus</string>
-    <string name="notification_channel_name">Cambios de precio</string>
-    <string name="notification_channel_description">Avisos cuando sube o baja el precio de tus gasolineras favoritas.</string>
-    <string name="widget_favorites_description">Precios y cambios de tus gasolineras favoritas.</string>
-    <string name="widget_full_tank_description">Busca la mejor gasolinera para llenar el depósito.</string>
-</resources>
