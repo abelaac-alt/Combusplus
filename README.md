@@ -144,3 +144,8 @@ La web comprueba los precios al abrir la aplicación y puede mostrar notificacio
 - El proxy solo expone el endpoint de estaciones cercanas.
 - Restringe la clave de Google Maps por dominio.
 - Rota cualquier clave que haya sido compartida públicamente.
+
+
+## Corrección 5.2
+
+La APK carga directamente la aplicación web incluida dentro del propio APK (`android_asset/www/index.html`). Ya no depende de GitHub Pages al arrancar y no puede abrir el README del repositorio por error. La versión web continúa disponible de forma independiente.

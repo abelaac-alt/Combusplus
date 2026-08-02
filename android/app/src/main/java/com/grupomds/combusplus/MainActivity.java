@@ -42,6 +42,9 @@ public class MainActivity extends Activity {
         settings.setGeolocationEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setUserAgentString(settings.getUserAgentString() + " CombusplusAndroid/5.0");
 
@@ -88,8 +91,9 @@ public class MainActivity extends Activity {
         });
 
         String page = getIntent().getStringExtra("open_page");
-        String url = BuildConfig.WEB_APP_URL;
+        String url = "file:///android_asset/www/index.html";
         if (page != null && !page.trim().isEmpty()) url += "#" + page;
+        fallbackLoaded = true;
         webView.loadUrl(url);
     }
 
