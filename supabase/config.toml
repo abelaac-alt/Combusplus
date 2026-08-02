@@ -1,7 +1,0 @@
-project_id = "combusplus"
-
-[functions.stations-nearby]
-verify_jwt = false
-
-[functions.sync-stations]
-verify_jwt = false
