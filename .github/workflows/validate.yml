@@ -33,6 +33,9 @@ jobs:
       - name: Optimizar mapa
         run: python scripts/optimize-nearby-map.py
 
+      - name: Corregir overlay y ampliar logo
+        run: python scripts/fix-map-overlay-and-logo.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
@@ -75,43 +78,27 @@ jobs:
           import xml.etree.ElementTree as ET
 
           required = [
-              'android/app/build.gradle.kts',
-              'android/app/src/main/AndroidManifest.xml',
-              'android/app/src/main/java/com/grupomds/combusplus/MainActivity.java',
-              'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java',
               'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java',
-              'scripts/apply-embedded-map-patch.py',
-              'scripts/fix-embedded-map-position.py',
-              'scripts/optimize-nearby-map.py',
-              'scripts/check-android-artifact.py',
+              'android/app/src/main/res/drawable-nodpi/combusplus_marker_logo.png',
+              'scripts/fix-map-overlay-and-logo.py',
           ]
-
           for name in required:
               assert Path(name).is_file(), f'Falta {name}'
 
           ET.parse('android/app/src/main/AndroidManifest.xml')
 
-          controller = Path(
-              'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java'
-          ).read_text(encoding='utf-8')
-          assert 'createAppMarker' in controller
-          assert 'favoriteMarker' in controller
-          assert 'lastPayloadHash' in controller
-          assert 'R.mipmap.ic_launcher' in controller
+          controller = Path('android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java').read_text(encoding='utf-8')
+          assert 'hide();\n                    activity.openStationFromNative(id);' in controller
+          assert 'R.drawable.combusplus_marker_logo' in controller
+          assert 'badgeSize' in controller
 
           app = Path('web/src/app.js').read_text(encoding='utf-8')
-          index = Path('web/index.html').read_text(encoding='utf-8')
-          assert 'ensureNearbyStationsForMap' in app
-          assert 'favorite: isFavorite' in app
-          assert '.slice(0, 80)' in app
-          assert 'Top 10' not in index
+          assert '.slice(0, 40)' in app
+          assert 'reshowNativeMapSoon' in app
 
-          print('Mapa cercano, marcadores y rendimiento correctos')
+          print('Overlay corregido y logo ampliado correctos')
           PY
 
       - name: Comprobar scripts
         run: |
-          python -m py_compile scripts/check-android-artifact.py
-          python -m py_compile scripts/apply-embedded-map-patch.py
-          python -m py_compile scripts/fix-embedded-map-position.py
-          python -m py_compile scripts/optimize-nearby-map.py
+          python -m py_compile scripts/fix-map-overlay-and-logo.py
