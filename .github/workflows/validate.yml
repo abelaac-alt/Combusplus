@@ -39,6 +39,9 @@ jobs:
       - name: Aplicar marco exacto y logotipos
         run: python scripts/fix-perfect-map-frame-and-branding.py
 
+      - name: Fijar menú, eliminar hueco y renovar widgets
+        run: python scripts/fix-static-nav-gap-and-widgets.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
