@@ -36,9 +36,23 @@ public class WebBridge {
     }
 
     @JavascriptInterface
-    public void openNativeMap() {
+    public void openNativeMapAt(double latitude, double longitude) {
+        if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
+        if (
+            latitude < -90d ||
+            latitude > 90d ||
+            longitude < -180d ||
+            longitude > 180d
+        ) {
+            return;
+        }
+
+        saveLastLocation(latitude, longitude);
+
         activity.runOnUiThread(() -> {
             Intent intent = new Intent(activity, NativeMapActivity.class);
+            intent.putExtra("latitude", latitude);
+            intent.putExtra("longitude", longitude);
             activity.startActivity(intent);
         });
     }
@@ -114,6 +128,8 @@ public class WebBridge {
     }
 
     private boolean isAllowedKey(String key) {
-        return key != null && key.startsWith("combusplus.") && key.length() <= 120;
+        return key != null &&
+                key.startsWith("combusplus.") &&
+                key.length() <= 120;
     }
 }

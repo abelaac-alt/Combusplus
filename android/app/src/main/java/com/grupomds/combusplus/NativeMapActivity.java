@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -52,23 +51,27 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        latitude = parseDouble(
-                SecureLocalStore.getString(
-                        this,
-                        WebBridge.LAST_LATITUDE,
-                        ""
-                ),
-                Double.NaN
-        );
+        latitude = getIntent().hasExtra("latitude")
+                ? getIntent().getDoubleExtra("latitude", Double.NaN)
+                : parseDouble(
+                        SecureLocalStore.getString(
+                                this,
+                                WebBridge.LAST_LATITUDE,
+                                ""
+                        ),
+                        Double.NaN
+                );
 
-        longitude = parseDouble(
-                SecureLocalStore.getString(
-                        this,
-                        WebBridge.LAST_LONGITUDE,
-                        ""
-                ),
-                Double.NaN
-        );
+        longitude = getIntent().hasExtra("longitude")
+                ? getIntent().getDoubleExtra("longitude", Double.NaN)
+                : parseDouble(
+                        SecureLocalStore.getString(
+                                this,
+                                WebBridge.LAST_LONGITUDE,
+                                ""
+                        ),
+                        Double.NaN
+                );
 
         GoogleMapOptions options = new GoogleMapOptions()
                 .zoomControlsEnabled(true)
@@ -95,10 +98,10 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
         );
 
         statusView = new TextView(this);
-        statusView.setText("Cargando gasolineras…");
+        statusView.setText("Cargando gasolineras cercanas…");
         statusView.setTextColor(Color.WHITE);
         statusView.setBackgroundColor(0xDD111214);
-        statusView.setPadding(28, 22, 28, 22);
+        statusView.setPadding(28, 22, 150, 22);
 
         FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -137,7 +140,7 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
 
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) {
             statusView.setText(
-                    "Abre primero Combusplus y permite la ubicación para mostrar gasolineras cercanas."
+                    "No se pudo obtener la ubicación. Vuelve atrás y pulsa Actualizar."
             );
             googleMap.moveCamera(
                     CameraUpdateFactory.newLatLngZoom(
@@ -203,18 +206,9 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
         connection.setConnectTimeout(12_000);
         connection.setReadTimeout(25_000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty(
-                "User-Agent",
-                "CombusplusAndroid/9.4"
-        );
-        connection.setRequestProperty(
-                "x-installation-id",
-                session.installationId
-        );
-        connection.setRequestProperty(
-                "x-combusplus-session",
-                session.token
-        );
+        connection.setRequestProperty("User-Agent", "CombusplusAndroid/9.4.2");
+        connection.setRequestProperty("x-installation-id", session.installationId);
+        connection.setRequestProperty("x-combusplus-session", session.token);
 
         String publishable = safe(BuildConfig.SUPABASE_PUBLISHABLE_KEY);
         if (!publishable.isEmpty()) {
@@ -270,12 +264,10 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
 
             Marker marker = googleMap.addMarker(
                     new MarkerOptions()
-                            .position(
-                                    new LatLng(
-                                            station.latitude,
-                                            station.longitude
-                                    )
-                            )
+                            .position(new LatLng(
+                                    station.latitude,
+                                    station.longitude
+                            ))
                             .title(station.name)
                             .snippet(station.snippet())
             );
@@ -284,12 +276,10 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
                 markerStations.put(marker, station);
             }
 
-            bounds.include(
-                    new LatLng(
-                            station.latitude,
-                            station.longitude
-                    )
-            );
+            bounds.include(new LatLng(
+                    station.latitude,
+                    station.longitude
+            ));
             added++;
         }
 
@@ -302,7 +292,7 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
 
         statusView.setText(
                 added +
-                " gasolineras cercanas · toca un marcador y después su ficha para ir"
+                " gasolineras cercanas · toca un marcador para ver sus datos"
         );
 
         try {
@@ -333,9 +323,7 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
         try {
             startActivity(intent);
         } catch (Exception ignored) {
-            Uri fallback = Uri.parse(
-                    "geo:0,0?q=" + lat + "," + lon
-            );
+            Uri fallback = Uri.parse("geo:0,0?q=" + lat + "," + lon);
             startActivity(new Intent(Intent.ACTION_VIEW, fallback));
         }
     }
@@ -437,20 +425,8 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
         }
 
         static Station from(JSONObject item) {
-            double lat = number(
-                    item,
-                    "latitud",
-                    "latitude",
-                    "lat"
-            );
-
-            double lon = number(
-                    item,
-                    "longitud",
-                    "longitude",
-                    "lng",
-                    "lon"
-            );
+            double lat = number(item, "latitud", "latitude", "lat");
+            double lon = number(item, "longitud", "longitude", "lng", "lon");
 
             if (!Double.isFinite(lat) || !Double.isFinite(lon)) {
                 return null;
@@ -478,13 +454,7 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
 
             String price = extractPrice(item);
 
-            return new Station(
-                    lat,
-                    lon,
-                    name,
-                    address,
-                    price
-            );
+            return new Station(lat, lon, name, address, price);
         }
 
         String snippet() {
