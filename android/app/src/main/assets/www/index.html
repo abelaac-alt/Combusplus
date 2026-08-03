@@ -263,5 +263,46 @@
 
   <script src="./config.js?v=9.0.0"></script>
   <script type="module" src="./src/app.js?v=9.0.0"></script>
+
+  <dialog id="onboardingDialog" class="dialog onboarding-dialog">
+    <article class="onboarding-panel">
+      <div class="onboarding-progress" aria-label="Progreso del tutorial">
+        <i class="is-active"></i><i></i><i></i><i></i>
+      </div>
+      <section class="onboarding-step is-active" data-onboarding-step="0">
+        <span class="eyebrow">BIENVENIDO A COMBUSPLUS</span>
+        <h2>Encuentra dónde te conviene repostar</h2>
+        <p>Combusplus compara precio, distancia y combustible gastado en el trayecto para recomendarte la opción con mejor resultado real.</p>
+        <div class="onboarding-visual">⛽</div>
+      </section>
+      <section class="onboarding-step" data-onboarding-step="1">
+        <span class="eyebrow">TU VEHÍCULO</span>
+        <h2>Guarda consumo y depósito</h2>
+        <p>Añade el combustible, consumo medio y capacidad del depósito. Así podrás buscar por importe o calcular automáticamente un depósito completo.</p>
+        <div class="onboarding-visual">🚗</div>
+      </section>
+      <section class="onboarding-step" data-onboarding-step="2">
+        <span class="eyebrow">AHORRO REAL</span>
+        <h2>Compara y abre la ruta</h2>
+        <p>El resultado incluye coste del repostaje, kilómetros, ida o ida y vuelta y ahorro frente a otra gasolinera. Después puedes pulsar «Ir a repostar».</p>
+        <div class="onboarding-visual">🧭</div>
+      </section>
+      <section class="onboarding-step" data-onboarding-step="3">
+        <span class="eyebrow">PRIVACIDAD</span>
+        <h2>Ayúdanos a mejorar</h2>
+        <p>Con tu permiso enviaremos estadísticas técnicas seudónimas: tipo de dispositivo, versión, funciones utilizadas, ciudad aproximada y presencia activa. No enviamos matrícula, vehículos, favoritos, historial ni ubicación exacta.</p>
+        <label class="analytics-consent">
+          <input id="analyticsConsent" type="checkbox">
+          <span>Permitir estadísticas de uso seudónimas</span>
+        </label>
+        <a href="./privacy.html" target="_blank" rel="noopener">Leer la política de privacidad</a>
+      </section>
+      <div class="onboarding-actions">
+        <button id="onboardingBack" class="secondary-btn" type="button" hidden>Anterior</button>
+        <button id="onboardingNext" class="primary-btn" type="button">Siguiente</button>
+      </div>
+    </article>
+  </dialog>
+
 </body>
 </html>

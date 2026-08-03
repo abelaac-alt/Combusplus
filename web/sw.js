@@ -1,4 +1,4 @@
-const CACHE = 'combusplus-v9-0';
+const CACHE = 'combusplus-v9-2';
 const SHELL = [
   './',
   './index.html',

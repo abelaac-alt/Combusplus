@@ -27,7 +27,9 @@ const STORAGE = {
   filters: 'combusplus.v5.filters',
   installationId: 'combusplus.v8.installationId',
   sessionToken: 'combusplus.v8.sessionToken',
-  sessionExpiresAt: 'combusplus.v8.sessionExpiresAt'
+  sessionExpiresAt: 'combusplus.v8.sessionExpiresAt',
+  onboardingDone: 'combusplus.v9.onboardingDone',
+  analyticsConsent: 'combusplus.v9.analyticsConsent'
 };
 
 const DEFAULT_SETTINGS = {
@@ -73,7 +75,8 @@ const state = {
     token: '',
     expiresAt: 0,
     promise: null
-  }
+  },
+  analytics: { enabled: false, heartbeatTimer: null, cityApprox: '' }
 };
 
 const $ = selector => document.querySelector(selector);
@@ -83,6 +86,10 @@ const el = {
   pages: $$('.page'),
   nav: $$('[data-nav]'),
   openSettings: $('#openSettings'),
+  onboardingDialog: $('#onboardingDialog'),
+  onboardingBack: $('#onboardingBack'),
+  onboardingNext: $('#onboardingNext'),
+  analyticsConsent: $('#analyticsConsent'),
 
   quickSearchForm: $('#quickSearchForm'),
   quickVehicle: $('#quickVehicle'),
@@ -510,6 +517,89 @@ function requestNativeIntegrityToken(requestHash) {
   });
 }
 
+
+function deviceSummary() {
+  const ua = navigator.userAgent || '';
+  let family = 'Otro';
+  if (/Android/i.test(ua)) family = 'Android';
+  else if (/iPhone|iPad/i.test(ua)) family = 'iOS';
+  else if (/Windows/i.test(ua)) family = 'Windows';
+  else if (/Macintosh|Mac OS/i.test(ua)) family = 'macOS';
+  else if (/Linux/i.test(ua)) family = 'Linux';
+  return {
+    platform: isNative() ? 'android' : 'web',
+    deviceFamily: family,
+    userAgent: ua.slice(0, 240),
+    screen: `${screen.width || 0}x${screen.height || 0}`,
+    language: navigator.language || '',
+    appVersion: APP_VERSION
+  };
+}
+
+function approximateCityFromAddress(address) {
+  const parts = String(address || '').split(',').map(value => value.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts[1].slice(0, 80);
+  return parts[0]?.slice(0, 80) || '';
+}
+
+async function sendAnalyticsEvent(eventName, metadata = {}) {
+  if (!state.analytics.enabled) return;
+  try {
+    await apiFetch('analytics-event', '', {
+      method: 'POST',
+      body: {
+        event: String(eventName || '').slice(0, 80),
+        page: String(location.hash.slice(1) || 'list').slice(0, 40),
+        cityApprox: state.analytics.cityApprox || '',
+        device: deviceSummary(),
+        metadata
+      }
+    });
+  } catch {
+    // Las estadísticas nunca bloquean la aplicación.
+  }
+}
+
+function startAnalyticsHeartbeat() {
+  if (state.analytics.heartbeatTimer) clearInterval(state.analytics.heartbeatTimer);
+  if (!state.analytics.enabled) return;
+  const pulse = () => {
+    if (document.visibilityState === 'visible') sendAnalyticsEvent('heartbeat');
+  };
+  pulse();
+  state.analytics.heartbeatTimer = setInterval(pulse, 60_000);
+}
+
+function showOnboardingIfNeeded() {
+  if (readStoredValue(STORAGE.onboardingDone) === '1' || !el.onboardingDialog) return;
+  let step = 0;
+  const steps = [...el.onboardingDialog.querySelectorAll('[data-onboarding-step]')];
+  const dots = [...el.onboardingDialog.querySelectorAll('.onboarding-progress i')];
+  const render = () => {
+    steps.forEach((node, index) => node.classList.toggle('is-active', index === step));
+    dots.forEach((node, index) => node.classList.toggle('is-active', index <= step));
+    el.onboardingBack.hidden = step === 0;
+    el.onboardingNext.textContent = step === steps.length - 1 ? 'Empezar' : 'Siguiente';
+  };
+  el.onboardingBack?.addEventListener('click', () => { step = Math.max(0, step - 1); render(); });
+  el.onboardingNext?.addEventListener('click', () => {
+    if (step < steps.length - 1) {
+      step += 1;
+      render();
+      return;
+    }
+    const accepted = Boolean(el.analyticsConsent?.checked);
+    writeStoredValue(STORAGE.analyticsConsent, accepted ? '1' : '0');
+    writeStoredValue(STORAGE.onboardingDone, '1');
+    state.analytics.enabled = accepted;
+    el.onboardingDialog.close();
+    startAnalyticsHeartbeat();
+    sendAnalyticsEvent('onboarding_completed', { analyticsConsent: accepted });
+  });
+  render();
+  el.onboardingDialog.showModal();
+}
+
 function clearBackendSession() {
   state.backendSession.token = '';
   state.backendSession.expiresAt = 0;
@@ -784,6 +874,8 @@ async function executeSearch(event) {
     renderStations();
     renderMapPreview();
     await checkFavoritePrices(false);
+    state.analytics.cityApprox = approximateCityFromAddress(best.address);
+    sendAnalyticsEvent('search_completed', { mode: input.fullTank ? 'fullTank' : 'amount', tripMode: input.tripMode, radius: input.radius });
     el.bestResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (searchError) {
     el.stationList.replaceChildren(emptyState(searchError.message));
@@ -851,7 +943,10 @@ async function runFullTankSearch({ openRoute = false } = {}) {
     renderStations();
     renderMapPreview();
     await checkFavoritePrices(false);
+    state.analytics.cityApprox = approximateCityFromAddress(best.address);
+    sendAnalyticsEvent('full_tank_widget_search', { tripMode: input.tripMode, radius: input.radius });
     el.bestResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast('Mejor gasolinera calculada. Pulsa «Abrir ruta» para ir a repostar.');
     if (openRoute) window.setTimeout(() => { window.location.href = mapsUrl(best); }, 250);
   } catch (searchError) {
     el.stationList.replaceChildren(emptyState(searchError.message));
@@ -922,6 +1017,7 @@ async function openComparison(selectedStation) {
       body: recommendationRequest(input, selectedStation.id)
     });
     const comparison = payload.comparison;
+    sendAnalyticsEvent('station_compared');
     if (!comparison?.best || !comparison?.selected) throw new Error('No se pudo comparar esa gasolinera.');
     const { best, selected } = comparison;
     const saving = Number(comparison.saving || 0);
@@ -1885,8 +1981,14 @@ function init() {
   bind();
   updateSearchModeUi();
   navigate(location.hash.slice(1) || 'list');
-  window.addEventListener('hashchange', () => navigate(location.hash.slice(1) || 'list'));
+  window.addEventListener('hashchange', () => {
+    navigate(location.hash.slice(1) || 'list');
+    sendAnalyticsEvent('page_view', { page: location.hash.slice(1) || 'list' });
+  });
+  state.analytics.enabled = readStoredValue(STORAGE.analyticsConsent) === '1';
   syncNativeConfig();
+  showOnboardingIfNeeded();
+  startAnalyticsHeartbeat();
   ensureBackendSession().then(() => syncNativeConfig()).catch(error => {
     console.error('No se pudo iniciar la sesión segura:', error);
   });

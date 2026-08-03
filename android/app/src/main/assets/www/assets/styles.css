@@ -211,3 +211,22 @@ html,body,.app-shell,main,.page{overscroll-behavior-x:none;touch-action:pan-y}
 .privacy-note{font-size:.86rem;line-height:1.5;color:#5f6570;margin:14px 0}.privacy-note a{color:#a40f18;font-weight:750}
 .secondary-btn.danger{color:#a40c15;border-color:#d9aeb1;background:#fff8f8}
 .secondary-btn.danger:active{background:#fdebec}
+
+
+/* Tutorial inicial Combusplus */
+.onboarding-dialog{border:0;background:transparent;padding:16px;width:min(100%,560px)}
+.onboarding-dialog::backdrop{background:rgba(8,10,14,.78);backdrop-filter:blur(5px)}
+.onboarding-panel{background:#fff;border-radius:24px;padding:24px;box-shadow:0 28px 80px rgba(0,0,0,.35);color:#17191d}
+.onboarding-progress{display:flex;gap:8px;margin-bottom:24px}
+.onboarding-progress i{height:5px;flex:1;border-radius:99px;background:#e4e6ea}
+.onboarding-progress i.is-active{background:#bd1721}
+.onboarding-step{display:none}
+.onboarding-step.is-active{display:block;animation:onboardingIn .22s ease}
+.onboarding-step h2{font-size:clamp(1.75rem,6vw,2.5rem);line-height:1.05;margin:.35rem 0 .8rem}
+.onboarding-step p{font-size:1rem;line-height:1.6;color:#555b66}
+.onboarding-visual{display:grid;place-items:center;font-size:4rem;min-height:150px;margin:18px 0;background:linear-gradient(145deg,#f5f6f8,#fff2f3);border-radius:20px}
+.onboarding-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:20px}
+.onboarding-actions .primary-btn,.onboarding-actions .secondary-btn{min-width:130px}
+.analytics-consent{display:flex;align-items:flex-start;gap:12px;margin:20px 0;padding:14px;border:1px solid #dde0e5;border-radius:14px;background:#f8f9fb}
+.analytics-consent input{width:20px;height:20px;margin-top:2px}
+@keyframes onboardingIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}

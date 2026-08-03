@@ -102,6 +102,7 @@ public final class AppWidgetUpdater {
         Intent intent = new Intent(context, MainActivity.class);
         intent.putExtra("open_page", page);
         intent.putExtra("auto_full_tank", fullTank);
+        intent.putExtra("from_full_tank_widget", fullTank);
         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return PendingIntent.getActivity(
                 context,
