@@ -1,9 +1,11 @@
 package com.grupomds.combusplus;
 
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewOutlineProvider;
@@ -26,6 +28,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 final class EmbeddedMapController {
@@ -36,6 +39,7 @@ final class EmbeddedMapController {
     private final MapView mapView;
     private final TextView loading;
     private final Map<Marker, String> markerIds = new HashMap<>();
+    private final Map<String, BitmapDescriptor> markerCache = new HashMap<>();
 
     private GoogleMap map;
     private JSONArray pendingStations = new JSONArray();
@@ -45,8 +49,6 @@ final class EmbeddedMapController {
     private int lastTop = Integer.MIN_VALUE;
     private int lastWidth = -1;
     private int lastHeight = -1;
-    private BitmapDescriptor normalMarker;
-    private BitmapDescriptor favoriteMarker;
 
     EmbeddedMapController(MainActivity activity, FrameLayout root, WebView webView) {
         this.activity = activity;
@@ -54,8 +56,8 @@ final class EmbeddedMapController {
         this.webView = webView;
 
         container = new FrameLayout(activity);
-        container.setBackgroundColor(0xFFD1131B);
-        container.setPadding(dp(3), dp(3), dp(3), dp(3));
+        container.setBackgroundColor(Color.TRANSPARENT);
+        container.setPadding(0, 0, 0, 0);
         container.setVisibility(View.GONE);
         container.setElevation(0f);
         container.setClipChildren(true);
@@ -64,7 +66,7 @@ final class EmbeddedMapController {
         container.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(18));
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(14));
             }
         });
 
@@ -83,14 +85,16 @@ final class EmbeddedMapController {
 
         mapView = new MapView(activity, options);
         mapView.onCreate((Bundle) null);
-        FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+        container.addView(
+                mapView,
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                )
         );
-        container.addView(mapView, mapParams);
 
         loading = new TextView(activity);
-        loading.setText("Buscando gasolineras cercanas…");
+        loading.setText("Buscando gasolineras…");
         loading.setTextColor(Color.WHITE);
         loading.setBackgroundColor(0xCC111318);
         loading.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -103,9 +107,6 @@ final class EmbeddedMapController {
         );
 
         root.addView(container);
-
-        normalMarker = loadMarker(R.drawable.map_marker_default, 72, 96);
-        favoriteMarker = loadMarker(R.drawable.map_marker_favorite, 72, 96);
 
         mapView.getMapAsync(googleMap -> {
             map = googleMap;
@@ -167,17 +168,15 @@ final class EmbeddedMapController {
         int left = webView.getLeft() + Math.round((float) leftCss * density);
         int top = webView.getTop() + Math.round((float) topCss * density);
         int width = Math.max(dp(220), Math.round((float) widthCss * density));
-        int requestedHeight = Math.max(dp(220), Math.round((float) heightCss * density));
-        int side = Math.max(width, requestedHeight);
-        side = Math.min(side, webView.getWidth() - dp(18));
+        int height = Math.max(dp(320), Math.round((float) heightCss * density));
 
         int viewportLeft = webView.getLeft();
         int viewportTop = webView.getTop();
         int viewportRight = viewportLeft + webView.getWidth();
         int viewportBottom = viewportTop + webView.getHeight();
 
-        int right = left + side;
-        int bottom = top + side;
+        int right = left + width;
+        int bottom = top + height;
 
         if (right <= viewportLeft || left >= viewportRight || bottom <= viewportTop || top >= viewportBottom) {
             return false;
@@ -197,7 +196,7 @@ final class EmbeddedMapController {
             params.topMargin = clippedTop;
             container.setLayoutParams(params);
 
-            FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(side, side);
+            FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(width, height);
             mapParams.leftMargin = left - clippedLeft;
             mapParams.topMargin = top - clippedTop;
             mapView.setLayoutParams(mapParams);
@@ -232,7 +231,7 @@ final class EmbeddedMapController {
 
             String id = item.optString("id", "");
             String name = item.optString("name", "Gasolinera");
-            String price = item.optString("price", "");
+            String price = normalizePrice(item.optString("price", ""));
             String status = item.optString("status", "");
             String address = item.optString("address", "");
             boolean favorite = item.optBoolean("favorite", false);
@@ -242,8 +241,8 @@ final class EmbeddedMapController {
                             .position(new LatLng(latitude, longitude))
                             .title(name)
                             .snippet(join(price, status, address))
-                            .anchor(0.5f, 1f)
-                            .icon(favorite ? favoriteMarker : normalMarker)
+                            .anchor(0.5f, 0.5f)
+                            .icon(priceMarker(price, favorite))
                             .zIndex(favorite ? 10f : 1f)
             );
 
@@ -253,24 +252,68 @@ final class EmbeddedMapController {
             added++;
         }
 
-        loading.setText(added == 0 ? "No se encontraron gasolineras en esta zona." : added + " gasolineras en el mapa");
+        loading.setText(added == 0 ? "No se encontraron gasolineras con estos filtros." : added + " gasolineras en el mapa");
         loading.setVisibility(added == 0 ? View.VISIBLE : View.GONE);
 
         if (hasBounds) {
             container.post(() -> {
                 try {
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), dp(42)));
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), dp(44)));
                 } catch (Exception ignored) {
                 }
             });
         }
     }
 
-    private BitmapDescriptor loadMarker(int resId, int widthDp, int heightDp) {
-        Bitmap raw = BitmapFactory.decodeResource(activity.getResources(), resId);
-        if (raw == null) return BitmapDescriptorFactory.defaultMarker();
-        Bitmap scaled = Bitmap.createScaledBitmap(raw, dp(widthDp), dp(heightDp), true);
-        return BitmapDescriptorFactory.fromBitmap(scaled);
+    private BitmapDescriptor priceMarker(String price, boolean favorite) {
+        String key = (favorite ? "f:" : "n:") + price;
+        BitmapDescriptor cached = markerCache.get(key);
+        if (cached != null) return cached;
+
+        int diameter = dp(58);
+        int bitmapSize = dp(66);
+        Bitmap bitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        float center = bitmapSize / 2f;
+        float radius = diameter / 2f;
+
+        paint.setColor(favorite ? 0xFFFFC107 : 0xFFD1131B);
+        canvas.drawCircle(center, center, radius, paint);
+
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(dp(3));
+        paint.setColor(Color.WHITE);
+        canvas.drawCircle(center, center, radius - dp(1.5f), paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        paint.setColor(favorite ? 0xFF111318 : Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setFakeBoldText(true);
+        paint.setTextSize(price.length() > 7 ? dp(12) : dp(14));
+
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        float baseline = center - (metrics.ascent + metrics.descent) / 2f;
+        canvas.drawText(price.isEmpty() ? "—" : price, center, baseline, paint);
+
+        BitmapDescriptor descriptor = BitmapDescriptorFactory.fromBitmap(bitmap);
+        markerCache.put(key, descriptor);
+        return descriptor;
+    }
+
+    private String normalizePrice(String raw) {
+        String value = safe(raw)
+                .replace("€/l", "")
+                .replace("€", "")
+                .trim();
+        if (value.isEmpty()) return "—";
+        try {
+            double number = Double.parseDouble(value.replace(',', '.'));
+            return String.format(Locale.US, "%.3f€", number).replace('.', ',');
+        } catch (Exception ignored) {
+            return value.length() > 8 ? value.substring(0, 8) : value;
+        }
     }
 
     void hide() {
@@ -299,10 +342,15 @@ final class EmbeddedMapController {
             mapView.onStop();
             started = false;
         }
+        markerCache.clear();
         mapView.onDestroy();
     }
 
     private int dp(int value) {
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
+
+    private int dp(float value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
