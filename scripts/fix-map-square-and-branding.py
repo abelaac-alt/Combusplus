@@ -9,7 +9,7 @@ INDEX = ROOT / "web/index.html"
 
 styles = STYLES.read_text(encoding="utf-8")
 block = '''
-/* Combusplus 9.6.2: mapa cuadrado con borde rojo */
+/* Combusplus 9.6.3: mapa cuadrado con borde rojo */
 .page[data-page="map"] #googleMap{
   position:relative !important;
   width:100% !important;
@@ -25,63 +25,64 @@ block = '''
   isolation:isolate !important;
   box-sizing:border-box !important;
 }
-.page[data-page="map"] #googleMap > *{
-  max-width:100%;
-}
+.page[data-page="map"] #googleMap > *{max-width:100%;}
 .page[data-page="map"] .map-card,
 .page[data-page="map"] .map-frame,
 .page[data-page="map"] .map-panel{
   overflow:hidden !important;
   border-radius:18px !important;
 }
-.page[data-page="map"] #googleMap .gm-style{
-  border-radius:14px !important;
-}
 '''
-if 'Combusplus 9.6.2: mapa cuadrado con borde rojo' not in styles:
+if 'Combusplus 9.6.3: mapa cuadrado con borde rojo' not in styles:
     styles += '\n' + block
 STYLES.write_text(styles, encoding='utf-8')
 
 index = INDEX.read_text(encoding='utf-8')
-index = index.replace(
-    '<button class="switch-btn" id="mapTopTenToggle" type="button" aria-pressed="false">Top 10</button>',
-    ''
+index = re.sub(
+    r'<button[^>]*id=["\']mapTopTenToggle["\'][^>]*>.*?</button>',
+    '',
+    index,
+    flags=re.S,
 )
 INDEX.write_text(index, encoding='utf-8')
 
 app = APP.read_text(encoding='utf-8')
-# quitar límites del número de gasolineras
-app = app.replace('.slice(0, 40)\n', '')
-app = app.replace('.slice(0, 80)\n', '')
-app = app.replace('.slice(0, 100)\n', '')
 app = app.replace("el.mapTopTenToggle.getAttribute('aria-pressed') === 'true'", "false")
-app = app.replace("el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));", "el.mapTopTenToggle?.setAttribute('aria-pressed', 'false');")
-app = app.replace("el.mapTopTenToggle.addEventListener('click', () => {", "el.mapTopTenToggle?.addEventListener('click', () => {")
+app = app.replace(
+    "el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));",
+    "el.mapTopTenToggle?.setAttribute('aria-pressed', 'false');"
+)
+app = app.replace(
+    "el.mapTopTenToggle.addEventListener('click', () => {",
+    "el.mapTopTenToggle?.addEventListener('click', () => {"
+)
 
-# Ajustar branding del logo si hay cabecera visual.
+# Elimina únicamente límites consecutivos al listado del mapa nativo.
+start = app.find('function renderNativeEmbeddedMap()')
+if start != -1:
+    end = app.find('\n}', start)
+    if end != -1:
+        section = app[start:end + 2]
+        section = re.sub(r'\n\s*\.slice\(0,\s*(?:40|80|100)\)', '', section)
+        app = app[:start] + section + app[end + 2:]
+
 if 'function applyCombusplusBrandingLogo() {' not in app:
     app += '''
 
 function applyCombusplusBrandingLogo() {
   const selectors = [
-    '.app-brand img',
-    '.brand img',
-    '.topbar img',
-    'header img',
-    'img[alt="Combusplus"]',
-    'img[data-brand="combusplus"]'
+    '.app-brand img', '.brand img', '.topbar img', 'header img',
+    'img[alt="Combusplus"]', 'img[data-brand="combusplus"]'
   ];
-  const elements = document.querySelectorAll(selectors.join(','));
-  elements.forEach(img => {
+  document.querySelectorAll(selectors.join(',')).forEach(img => {
     if (!(img instanceof HTMLImageElement)) return;
     img.src = 'assets/combusplus-app-logo.png';
     img.alt = 'Combusplus';
   });
 }
-
 document.addEventListener('DOMContentLoaded', applyCombusplusBrandingLogo);
 window.addEventListener('load', applyCombusplusBrandingLogo);
 '''
 
 APP.write_text(app, encoding='utf-8')
-print('Mapa cuadrado, sin límite de 40 y branding aplicado.')
+print('Mapa cuadrado, branding y carga sin límite aplicados.')
