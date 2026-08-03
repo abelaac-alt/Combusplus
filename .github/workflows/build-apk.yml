@@ -31,11 +31,14 @@ jobs:
       - name: Optimizar mapa y cargar cercanas
         run: python scripts/optimize-nearby-map.py
 
-      - name: Corregir overlay y ampliar logo
+      - name: Corregir overlay y branding
         run: python scripts/fix-map-overlay-and-logo.py
 
-      - name: Aplicar mapa cuadrado y marcadores finales
+      - name: Aplicar mapa cuadrado
         run: python scripts/fix-map-square-and-branding.py
+
+      - name: Aplicar marcadores de precio y filtro
+        run: python scripts/fix-map-price-markers-and-filter.py
 
       - name: Configurar Java 17
         uses: actions/setup-java@v5
@@ -76,11 +79,16 @@ jobs:
             -PGOOGLE_MAPS_ANDROID_MAP_ID="$MAPS_ANDROID_ID" \
             -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
 
+      - name: Comprobar seguridad del APK
+        run: |
+          python scripts/check-android-artifact.py \
+            android/app/build/outputs/apk/debug/app-debug.apk
+
       - name: Preparar artefacto
         run: |
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v9.6.2-debug.apk
-          sha256sum release/Combusplus-v9.6.2-debug.apk > release/Combusplus-v9.6.2-debug.apk.sha256
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v9.6.4-debug.apk
+          sha256sum release/Combusplus-v9.6.4-debug.apk > release/Combusplus-v9.6.4-debug.apk.sha256
 
       - name: Subir APK
         uses: actions/upload-artifact@v7
