@@ -24,6 +24,9 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v6
 
+      - name: Aplicar mapa integrado
+        run: python scripts/apply-embedded-map-patch.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
@@ -70,7 +73,8 @@ jobs:
               'android/app/src/main/AndroidManifest.xml',
               'android/app/src/main/java/com/grupomds/combusplus/MainActivity.java',
               'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java',
-              'android/app/src/main/java/com/grupomds/combusplus/NativeMapActivity.java',
+              'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java',
+              'scripts/apply-embedded-map-patch.py',
               'scripts/check-android-artifact.py',
           ]
 
@@ -88,15 +92,30 @@ jobs:
 
           manifest = Path('android/app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
           assert 'com.google.android.geo.API_KEY' in manifest
-          assert '.NativeMapActivity' in manifest
 
           bridge = Path(
               'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java'
           ).read_text(encoding='utf-8')
-          assert 'openNativeMap' in bridge
+          assert 'renderNativeMap' in bridge
+          assert 'hideNativeMap' in bridge
 
-          print('Integración de Google Maps nativo correcta')
+          controller = Path(
+              'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java'
+          ).read_text(encoding='utf-8')
+          assert 'MapView' in controller
+          assert 'setOnMarkerClickListener' in controller
+
+          app = Path('web/src/app.js').read_text(encoding='utf-8')
+          index = Path('web/index.html').read_text(encoding='utf-8')
+          assert 'renderNativeEmbeddedMap' in app
+          assert 'CombusplusNativeMap' in app
+          assert 'mapSearch' in index
+          assert 'clearMapSearch' in index
+
+          print('Integración de Google Maps embebido correcta')
           PY
 
       - name: Comprobar script de seguridad
-        run: python -m py_compile scripts/check-android-artifact.py
+        run: |
+          python -m py_compile scripts/check-android-artifact.py
+          python -m py_compile scripts/apply-embedded-map-patch.py
