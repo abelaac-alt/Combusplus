@@ -25,12 +25,26 @@
         android:theme="@style/Theme.Combusplus"
         android:usesCleartextTraffic="false">
 
+        <uses-library
+            android:name="org.apache.http.legacy"
+            android:required="false" />
+
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${GOOGLE_MAPS_ANDROID_API_KEY}" />
+
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
+
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
+
+        <activity
+            android:name=".NativeMapActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".MainActivity"

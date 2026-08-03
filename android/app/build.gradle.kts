@@ -2,9 +2,12 @@ plugins {
     id("com.android.application")
 }
 
-val webAppUrl = providers.gradleProperty("COMBUSPLUS_WEB_URL").orElse("https://abelaac-alt.github.io/Combusplus/")
+val webAppUrl = providers.gradleProperty("COMBUSPLUS_WEB_URL")
+    .orElse("https://abelaac-alt.github.io/Combusplus/")
 val functionsUrl = providers.gradleProperty("COMBUSPLUS_FUNCTIONS_URL").orElse("")
 val publishableKey = providers.gradleProperty("COMBUSPLUS_PUBLISHABLE_KEY").orElse("")
+val androidMapsApiKey = providers.gradleProperty("GOOGLE_MAPS_ANDROID_API_KEY").orElse("")
+val androidMapId = providers.gradleProperty("GOOGLE_MAPS_ANDROID_MAP_ID").orElse("")
 val playIntegrityProjectNumber = providers.gradleProperty("PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER").orElse("0")
 val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
 val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
@@ -30,12 +33,20 @@ android {
         applicationId = "com.grupomds.combusplus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 40
-        versionName = "9.0.0"
+        versionCode = 41
+        versionName = "9.4.0"
+
         buildConfigField("String", "WEB_APP_URL", javaString(webAppUrl.get()))
         buildConfigField("String", "SUPABASE_FUNCTIONS_URL", javaString(functionsUrl.get()))
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", javaString(publishableKey.get()))
-        buildConfigField("long", "PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER", "${playIntegrityProjectNumber.get()}L")
+        buildConfigField("String", "GOOGLE_MAPS_ANDROID_MAP_ID", javaString(androidMapId.get()))
+        buildConfigField(
+            "long",
+            "PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER",
+            "${playIntegrityProjectNumber.get()}L"
+        )
+
+        manifestPlaceholders["GOOGLE_MAPS_ANDROID_API_KEY"] = androidMapsApiKey.get()
     }
 
     buildFeatures {
@@ -44,14 +55,17 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Solo se empaquetan los recursos generados durante la compilación.
-            // Los archivos antiguos que existan en src/main/assets no entran en el APK/AAB.
             assets.setSrcDirs(listOf(generatedWebAssetsDir.get().asFile))
         }
     }
 
     signingConfigs {
-        if (!keystoreFile.isNullOrBlank() && !keystorePassword.isNullOrBlank() && !keyAliasValue.isNullOrBlank() && !keyPasswordValue.isNullOrBlank()) {
+        if (
+            !keystoreFile.isNullOrBlank() &&
+            !keystorePassword.isNullOrBlank() &&
+            !keyAliasValue.isNullOrBlank() &&
+            !keyPasswordValue.isNullOrBlank()
+        ) {
             create("release") {
                 storeFile = file(keystoreFile)
                 storePassword = keystorePassword
@@ -70,18 +84,25 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
+
         getByName("release") {
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (signingConfigs.findByName("release") != null) signingConfig = signingConfigs.getByName("release")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            if (signingConfigs.findByName("release") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     packaging {
@@ -101,6 +122,9 @@ dependencies {
     implementation("androidx.car.app:app:1.7.0")
     implementation("androidx.car.app:app-projected:1.7.0")
     implementation("com.google.android.play:integrity:1.6.0")
+
+    implementation("com.google.android.gms:play-services-maps:20.0.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 val syncWebAssets by tasks.registering(Sync::class) {
@@ -124,10 +148,11 @@ val syncWebAssets by tasks.registering(Sync::class) {
         val output = generatedWebAssetsDir.get().asFile
         val configFile = output.resolve("www/config.js")
         configFile.parentFile.mkdirs()
+
         configFile.writeText(
             """
             window.COMBUSPLUS_CONFIG = Object.freeze({
-              version: '9.0.0',
+              version: '9.4.0',
               supabaseFunctionsUrl: '${jsString(functionsUrl.get())}',
               supabasePublishableKey: '${jsString(publishableKey.get())}',
               googleMapsKey: '',

@@ -1,5 +1,6 @@
 package com.grupomds.combusplus;
 
+import android.content.Intent;
 import android.webkit.JavascriptInterface;
 
 public class WebBridge {
@@ -35,17 +36,34 @@ public class WebBridge {
     }
 
     @JavascriptInterface
+    public void openNativeMap() {
+        activity.runOnUiThread(() -> {
+            Intent intent = new Intent(activity, NativeMapActivity.class);
+            activity.startActivity(intent);
+        });
+    }
+
+    @JavascriptInterface
     public void requestNotificationPermission() {
         activity.runOnUiThread(activity::requestNotificationPermission);
     }
 
     @JavascriptInterface
     public void requestIntegrityToken(String requestId, String requestHash) {
-        if (requestId == null || requestId.length() > 120 || requestHash == null || requestHash.length() > 200) {
+        if (
+            requestId == null ||
+            requestId.length() > 120 ||
+            requestHash == null ||
+            requestHash.length() > 200
+        ) {
             return;
         }
-        integrityProvider.requestToken(requestHash, (token, error) ->
-                activity.runOnUiThread(() -> activity.deliverIntegrityResult(requestId, token, error))
+
+        integrityProvider.requestToken(
+            requestHash,
+            (token, error) -> activity.runOnUiThread(
+                () -> activity.deliverIntegrityResult(requestId, token, error)
+            )
         );
     }
 
@@ -59,10 +77,22 @@ public class WebBridge {
     @JavascriptInterface
     public void saveLastLocation(double latitude, double longitude) {
         if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
-        if (latitude < -90d || latitude > 90d || longitude < -180d || longitude > 180d) return;
+        if (
+            latitude < -90d ||
+            latitude > 90d ||
+            longitude < -180d ||
+            longitude > 180d
+        ) {
+            return;
+        }
+
         SecureLocalStore.putString(activity, LAST_LATITUDE, Double.toString(latitude));
         SecureLocalStore.putString(activity, LAST_LONGITUDE, Double.toString(longitude));
-        SecureLocalStore.putString(activity, LAST_LOCATION_AT, Long.toString(System.currentTimeMillis()));
+        SecureLocalStore.putString(
+            activity,
+            LAST_LOCATION_AT,
+            Long.toString(System.currentTimeMillis())
+        );
     }
 
     @JavascriptInterface
