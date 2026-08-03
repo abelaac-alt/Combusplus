@@ -33,8 +33,11 @@ jobs:
       - name: Optimizar mapa
         run: python scripts/optimize-nearby-map.py
 
-      - name: Corregir overlay y ampliar logo
+      - name: Corregir overlay
         run: python scripts/fix-map-overlay-and-logo.py
+
+      - name: Aplicar mapa cuadrado y branding
+        run: python scripts/fix-map-square-and-branding.py
 
       - name: Configurar Node 24
         uses: actions/setup-node@v5
@@ -71,34 +74,40 @@ jobs:
           deno check supabase/functions/admin-analytics/index.ts
           deno check supabase/functions/health/index.ts
 
-      - name: Validar mapa Android
+      - name: Validar mapa cuadrado
         run: |
           python - <<'PY'
           from pathlib import Path
-          import xml.etree.ElementTree as ET
-
+          
           required = [
               'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java',
-              'android/app/src/main/res/drawable-nodpi/combusplus_marker_logo.png',
-              'scripts/fix-map-overlay-and-logo.py',
+              'android/app/src/main/res/drawable-nodpi/map_marker_default.png',
+              'android/app/src/main/res/drawable-nodpi/map_marker_favorite.png',
+              'android/app/src/main/res/drawable-nodpi/combusplus_app_logo.png',
+              'web/assets/combusplus-app-logo.png',
+              'scripts/fix-map-square-and-branding.py',
           ]
           for name in required:
               assert Path(name).is_file(), f'Falta {name}'
 
-          ET.parse('android/app/src/main/AndroidManifest.xml')
-
           controller = Path('android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java').read_text(encoding='utf-8')
-          assert 'hide();\n                    activity.openStationFromNative(id);' in controller
-          assert 'R.drawable.combusplus_marker_logo' in controller
-          assert 'badgeSize' in controller
+          assert 'R.drawable.map_marker_default' in controller
+          assert 'R.drawable.map_marker_favorite' in controller
+          assert 'container.setBackgroundColor(0xFFD1131B);' in controller
+          assert 'int side = Math.max(width, requestedHeight);' in controller
 
           app = Path('web/src/app.js').read_text(encoding='utf-8')
-          assert '.slice(0, 40)' in app
-          assert 'reshowNativeMapSoon' in app
+          assert '.slice(0, 40)' not in app
+          assert '.slice(0, 80)' not in app
+          assert 'applyCombusplusBrandingLogo' in app
 
-          print('Overlay corregido y logo ampliado correctos')
+          styles = Path('web/assets/styles.css').read_text(encoding='utf-8')
+          assert 'Combusplus 9.6.2: mapa cuadrado con borde rojo' in styles
+          assert 'aspect-ratio:1 / 1' in styles
+          assert 'border:3px solid #d1131b' in styles
+          
+          print('Mapa cuadrado y marcadores personalizados correctos')
           PY
 
-      - name: Comprobar scripts
-        run: |
-          python -m py_compile scripts/fix-map-overlay-and-logo.py
+      - name: Comprobar script Python
+        run: python -m py_compile scripts/fix-map-square-and-branding.py
