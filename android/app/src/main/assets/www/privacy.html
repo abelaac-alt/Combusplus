@@ -9,48 +9,76 @@
   <link rel="icon" href="./assets/icon-192.png" type="image/png">
   <style>
     :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17191d;background:#f4f5f7}
-    *{box-sizing:border-box}body{margin:0}.wrap{max-width:820px;margin:auto;padding:32px 20px 64px}.head{display:flex;align-items:center;gap:14px;padding:20px 0;border-bottom:4px solid #b3131b}.head img{width:48px;height:48px}.head strong{font-size:1.5rem}article{background:white;margin-top:24px;padding:28px;border:1px solid #d8dbe0}h1{font-size:2rem;margin:0 0 8px}h2{margin-top:28px;font-size:1.2rem}p,li{line-height:1.62}a{color:#9f1018;font-weight:700}.muted{color:#5d626b}.back{display:inline-block;margin-top:24px}
+    *{box-sizing:border-box}
+    body{margin:0}
+    .wrap{max-width:820px;margin:auto;padding:32px 20px 64px}
+    .head{display:flex;align-items:center;gap:14px;padding:20px 0;border-bottom:4px solid #b3131b}
+    .head img{width:48px;height:48px}
+    .head strong{font-size:1.5rem}
+    article{background:white;margin-top:24px;padding:28px;border:1px solid #d8dbe0;border-radius:18px}
+    h1{font-size:2rem;margin:0 0 8px}
+    h2{margin-top:28px;font-size:1.2rem}
+    p,li{line-height:1.62}
+    a{color:#9f1018;font-weight:700}
+    .muted{color:#5d626b}
+    .back{display:inline-block;margin-top:24px}
   </style>
 </head>
 <body>
   <main class="wrap">
-    <header class="head"><img src="./assets/logo.png" alt=""><strong>Combusplus</strong></header>
+    <header class="head">
+      <img src="./assets/logo.png" alt="">
+      <strong>Combusplus</strong>
+    </header>
+
     <article>
       <h1>Política de privacidad</h1>
-      <p class="muted">Versión 2.0 · 2 de agosto de 2026</p>
-      <p>Combusplus 9 está diseñada para funcionar sin registro de usuario. Los datos personales de uso —vehículos, matrículas o referencias, consumo, capacidad del depósito, favoritas, descuentos, ajustes e historial de repostajes— se guardan localmente en el dispositivo y no se sincronizan con una cuenta.</p>
+      <p class="muted">Última actualización: 3 de agosto de 2026</p>
 
-      <h2>Datos tratados para realizar búsquedas</h2>
-      <p>Cuando solicitas una búsqueda, la aplicación envía al backend la ubicación aproximada necesaria, el radio, el tipo de combustible, el consumo, el importe o capacidad del depósito, la modalidad de trayecto y los descuentos que hayas configurado. Se utilizan únicamente para calcular y devolver resultados. La ubicación y los datos del vehículo no se guardan en la base de datos del backend.</p>
+      <h2>1. Gestión de la aplicación</h2>
+      <p>Combusplus está gestionada por <strong>A2C Solutions</strong>.</p>
 
-      <h2>Seguridad y prevención de abuso</h2>
-      <p>La instalación genera un identificador aleatorio. El servidor almacena únicamente una huella criptográfica irreversible de ese identificador, junto con plataforma, versión, estado de integridad y marcas de tiempo. También puede conservar eventos técnicos de seguridad y límites de uso. Estos registros se eliminan automáticamente conforme a la política operativa del servicio.</p>
+      <h2>2. Datos del usuario</h2>
+      <p>Combusplus no requiere registro y no solicita nombre, apellidos, correo electrónico, teléfono, documentos de identidad ni datos bancarios.</p>
+      <p>Los vehículos, consumos, capacidad del depósito, favoritos, descuentos, ajustes e historial se guardan en el propio dispositivo.</p>
 
-      <h2>Permisos</h2>
+      <h2>3. Ubicación</h2>
+      <p>La aplicación puede utilizar la ubicación del dispositivo, con permiso del usuario, para encontrar gasolineras cercanas, calcular distancias y mostrar rutas.</p>
+      <p>La ubicación exacta no se conserva como parte del perfil del usuario.</p>
+
+      <h2>4. Estadísticas opcionales</h2>
+      <p>Cuando el usuario lo acepta, Combusplus puede registrar estadísticas técnicas y seudónimas para mejorar la aplicación, como:</p>
       <ul>
-        <li><strong>Ubicación:</strong> se solicita mientras utilizas la aplicación para localizar gasolineras cercanas. No se solicita ubicación permanente en segundo plano.</li>
-        <li><strong>Notificaciones:</strong> se usa para avisos de cambios de precio en favoritas cuando el usuario los activa.</li>
-        <li><strong>Internet:</strong> necesario para consultar precios, mapas y rutas.</li>
+        <li>tipo de dispositivo y sistema operativo;</li>
+        <li>versión de la aplicación;</li>
+        <li>funciones utilizadas;</li>
+        <li>ciudad o zona aproximada;</li>
+        <li>identificador técnico de instalación;</li>
+        <li>fecha de la última actividad.</li>
+      </ul>
+      <p>Estas estadísticas no incluyen nombre, correo electrónico, teléfono, matrícula, vehículos guardados, favoritos, historial de repostajes ni ubicación exacta.</p>
+      <p>El usuario puede rechazar esta opción sin que ello impida utilizar la aplicación.</p>
+
+      <h2>5. Finalidad</h2>
+      <p>La información técnica se utiliza únicamente para prestar el servicio, calcular resultados, mantener la seguridad, corregir errores y mejorar Combusplus.</p>
+      <p>No se utiliza para publicidad personalizada ni se vende a terceros.</p>
+
+      <h2>6. Permisos</h2>
+      <ul>
+        <li><strong>Ubicación:</strong> para encontrar gasolineras cercanas y calcular trayectos.</li>
+        <li><strong>Notificaciones:</strong> para avisos activados por el usuario.</li>
+        <li><strong>Internet:</strong> para consultar precios, mapas y rutas.</li>
       </ul>
 
-      <h2>Proveedores</h2>
-      <p>La infraestructura puede utilizar Supabase para el backend y Google Maps u OpenStreetMap para mapas y rutas. Cada proveedor aplica sus propias condiciones y medidas de seguridad.</p>
+      <h2>7. Conservación y eliminación</h2>
+      <p>Los datos guardados en el dispositivo permanecen hasta que el usuario los elimina, borra los datos de la aplicación o la desinstala.</p>
+      <p>Las estadísticas técnicas se conservan solo durante el tiempo necesario para analizar y mejorar el funcionamiento de Combusplus.</p>
 
-      <h2>Conservación y eliminación</h2>
-      <p>Puedes borrar los datos locales desde la propia aplicación, borrando el almacenamiento de la app o desinstalándola. Al no existir una cuenta, esos datos no pueden recuperarse desde otro dispositivo. Los registros técnicos del servidor se depuran automáticamente.</p>
-
-      <h2>Contacto y responsable</h2>
-      <p>Antes de publicar, sustituye este párrafo por la denominación legal, NIF, dirección y correo de privacidad del responsable de Combusplus. Google Play exige que esta información y la URL de la política sean públicas y estén actualizadas.</p>
+      <h2>8. Cambios</h2>
+      <p>Esta política podrá actualizarse cuando cambien las funciones de la aplicación. La versión vigente estará disponible desde Combusplus y desde su página oficial.</p>
 
       <a class="back" href="./">Volver a Combusplus</a>
     </article>
-  
-<section>
-  <h2>Estadísticas opcionales de uso</h2>
-  <p>Solo cuando el usuario lo acepta durante el tutorial, Combusplus envía estadísticas técnicas seudónimas: identificador irreversible de instalación, plataforma, familia de dispositivo, versión, páginas y funciones utilizadas, ciudad aproximada derivada de la zona de búsqueda y marca temporal de actividad.</p>
-  <p>No se envían matrículas, vehículos, capacidad del depósito, favoritos, descuentos, historial de repostajes ni coordenadas exactas. El consentimiento puede retirarse borrando los datos de la aplicación o reinstalándola.</p>
-</section>
-
-</main>
+  </main>
 </body>
 </html>
