@@ -2,13 +2,8 @@ package com.grupomds.combusplus;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
-import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.Rect;
-import android.graphics.RectF;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewOutlineProvider;
@@ -59,7 +54,8 @@ final class EmbeddedMapController {
         this.webView = webView;
 
         container = new FrameLayout(activity);
-        container.setBackgroundColor(Color.WHITE);
+        container.setBackgroundColor(0xFFD1131B);
+        container.setPadding(dp(3), dp(3), dp(3), dp(3));
         container.setVisibility(View.GONE);
         container.setElevation(0f);
         container.setClipChildren(true);
@@ -68,8 +64,7 @@ final class EmbeddedMapController {
         container.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
-                float density = activity.getResources().getDisplayMetrics().density;
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 12f * density);
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(18));
             }
         });
 
@@ -84,25 +79,21 @@ final class EmbeddedMapController {
                 .liteMode(false);
 
         String mapId = safe(BuildConfig.GOOGLE_MAPS_ANDROID_MAP_ID);
-        if (!mapId.isEmpty()) {
-            options.mapId(mapId);
-        }
+        if (!mapId.isEmpty()) options.mapId(mapId);
 
         mapView = new MapView(activity, options);
         mapView.onCreate((Bundle) null);
-        container.addView(
-                mapView,
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                )
+        FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
         );
+        container.addView(mapView, mapParams);
 
         loading = new TextView(activity);
         loading.setText("Buscando gasolineras cercanas…");
         loading.setTextColor(Color.WHITE);
-        loading.setBackgroundColor(0xD9111318);
-        loading.setPadding(22, 16, 22, 16);
+        loading.setBackgroundColor(0xCC111318);
+        loading.setPadding(dp(14), dp(10), dp(14), dp(10));
         container.addView(
                 loading,
                 new FrameLayout.LayoutParams(
@@ -113,8 +104,8 @@ final class EmbeddedMapController {
 
         root.addView(container);
 
-        normalMarker = createAppMarker(false);
-        favoriteMarker = createAppMarker(true);
+        normalMarker = loadMarker(R.drawable.map_marker_default, 72, 96);
+        favoriteMarker = loadMarker(R.drawable.map_marker_favorite, 72, 96);
 
         mapView.getMapAsync(googleMap -> {
             map = googleMap;
@@ -122,6 +113,8 @@ final class EmbeddedMapController {
             map.getUiSettings().setZoomControlsEnabled(true);
             map.getUiSettings().setCompassEnabled(true);
             map.getUiSettings().setMyLocationButtonEnabled(false);
+            map.getUiSettings().setRotateGesturesEnabled(false);
+            map.getUiSettings().setTiltGesturesEnabled(false);
 
             map.setOnMarkerClickListener(marker -> {
                 String id = markerIds.get(marker);
@@ -173,16 +166,18 @@ final class EmbeddedMapController {
 
         int left = webView.getLeft() + Math.round((float) leftCss * density);
         int top = webView.getTop() + Math.round((float) topCss * density);
-        int width = Math.max(1, Math.round((float) widthCss * density));
-        int height = Math.max(Math.round(340f * density), Math.round((float) heightCss * density));
+        int width = Math.max(dp(220), Math.round((float) widthCss * density));
+        int requestedHeight = Math.max(dp(220), Math.round((float) heightCss * density));
+        int side = Math.max(width, requestedHeight);
+        side = Math.min(side, webView.getWidth() - dp(18));
 
         int viewportLeft = webView.getLeft();
         int viewportTop = webView.getTop();
         int viewportRight = viewportLeft + webView.getWidth();
         int viewportBottom = viewportTop + webView.getHeight();
 
-        int right = left + width;
-        int bottom = top + height;
+        int right = left + side;
+        int bottom = top + side;
 
         if (right <= viewportLeft || left >= viewportRight || bottom <= viewportTop || top >= viewportBottom) {
             return false;
@@ -202,7 +197,7 @@ final class EmbeddedMapController {
             params.topMargin = clippedTop;
             container.setLayoutParams(params);
 
-            FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(width, height);
+            FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(side, side);
             mapParams.leftMargin = left - clippedLeft;
             mapParams.topMargin = top - clippedTop;
             mapView.setLayoutParams(mapParams);
@@ -253,92 +248,29 @@ final class EmbeddedMapController {
             );
 
             if (marker != null && !id.isEmpty()) markerIds.put(marker, id);
-
             bounds.include(new LatLng(latitude, longitude));
             hasBounds = true;
             added++;
         }
 
-        loading.setText(added == 0 ? "No se encontraron gasolineras cercanas." : added + " gasolineras cercanas");
+        loading.setText(added == 0 ? "No se encontraron gasolineras en esta zona." : added + " gasolineras en el mapa");
         loading.setVisibility(added == 0 ? View.VISIBLE : View.GONE);
 
         if (hasBounds) {
             container.post(() -> {
                 try {
-                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), Math.round(54f * activity.getResources().getDisplayMetrics().density)));
+                    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), dp(42)));
                 } catch (Exception ignored) {
                 }
             });
         }
     }
 
-    private BitmapDescriptor createAppMarker(boolean favorite) {
-        float density = activity.getResources().getDisplayMetrics().density;
-        int size = Math.round(62f * density);
-        int tail = Math.round(14f * density);
-        int logoSize = Math.round(28f * density);
-
-        Bitmap bitmap = Bitmap.createBitmap(size, size + tail, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        float centerX = size / 2f;
-        float centerY = size / 2f;
-        float radius = size * 0.42f;
-
-        Path pin = new Path();
-        pin.moveTo(centerX, size + 9f * density);
-        pin.cubicTo(centerX - radius * 0.45f, size * 0.78f, centerX - radius, size * 0.60f, centerX - radius, centerY);
-        pin.arcTo(new RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius), 180f, 180f);
-        pin.cubicTo(centerX + radius, size * 0.60f, centerX + radius * 0.45f, size * 0.78f, centerX, size + 9f * density);
-        pin.close();
-
-        paint.setColor(favorite ? 0xFFFFC107 : 0xFFB3131B);
-        canvas.drawPath(pin, paint);
-
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(3.5f * density);
-        paint.setColor(Color.WHITE);
-        canvas.drawPath(pin, paint);
-        paint.setStyle(Paint.Style.FILL);
-
-        float badgeSize = 34f * density;
-        RectF badge = new RectF(centerX - badgeSize / 2f, centerY - badgeSize / 2f, centerX + badgeSize / 2f, centerY + badgeSize / 2f);
-        paint.setColor(Color.WHITE);
-        canvas.drawRoundRect(badge, 8f * density, 8f * density, paint);
-
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(1.5f * density);
-        paint.setColor(0x22000000);
-        canvas.drawRoundRect(badge, 8f * density, 8f * density, paint);
-        paint.setStyle(Paint.Style.FILL);
-
-        Bitmap logo = BitmapFactory.decodeResource(activity.getResources(), R.drawable.combusplus_marker_logo);
-        if (logo == null) {
-            logo = BitmapFactory.decodeResource(activity.getResources(), R.mipmap.ic_launcher);
-        }
-
-        if (logo != null) {
-            Rect source = new Rect(0, 0, logo.getWidth(), logo.getHeight());
-            int half = logoSize / 2;
-            Rect destination = new Rect(Math.round(centerX) - half, Math.round(centerY) - half, Math.round(centerX) + half, Math.round(centerY) + half);
-            canvas.drawBitmap(logo, source, destination, paint);
-        }
-
-        if (favorite) {
-            Paint starPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            float cx = size - 12f * density;
-            float cy = 12f * density;
-            starPaint.setColor(Color.WHITE);
-            canvas.drawCircle(cx, cy, 9f * density, starPaint);
-            starPaint.setColor(0xFF111318);
-            starPaint.setTextAlign(Paint.Align.CENTER);
-            starPaint.setTextSize(12f * density);
-            starPaint.setFakeBoldText(true);
-            canvas.drawText("★", cx, cy + 4f * density, starPaint);
-        }
-
-        return BitmapDescriptorFactory.fromBitmap(bitmap);
+    private BitmapDescriptor loadMarker(int resId, int widthDp, int heightDp) {
+        Bitmap raw = BitmapFactory.decodeResource(activity.getResources(), resId);
+        if (raw == null) return BitmapDescriptorFactory.defaultMarker();
+        Bitmap scaled = Bitmap.createScaledBitmap(raw, dp(widthDp), dp(heightDp), true);
+        return BitmapDescriptorFactory.fromBitmap(scaled);
     }
 
     void hide() {
@@ -368,6 +300,10 @@ final class EmbeddedMapController {
             started = false;
         }
         mapView.onDestroy();
+    }
+
+    private int dp(int value) {
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
     private static String join(String... values) {
