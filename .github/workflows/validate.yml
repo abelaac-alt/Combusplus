@@ -81,6 +81,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           required = [
               'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java',
@@ -89,6 +90,7 @@ jobs:
               'web/index.html',
               'web/assets/styles.css',
           ]
+
           missing = [item for item in required if not Path(item).is_file()]
           if missing:
               raise RuntimeError('Faltan archivos: ' + ', '.join(missing))
@@ -97,6 +99,35 @@ jobs:
           app = Path('web/src/app.js').read_text(encoding='utf-8')
           index = Path('web/index.html').read_text(encoding='utf-8')
           styles = Path('web/assets/styles.css').read_text(encoding='utf-8')
+
+          # Valida el resultado real, no el nombre de un comentario de versión.
+          map_rule_match = re.search(
+              r'(?:\.page\[data-page=["\']map["\']\]\s+#googleMap|#page-map\s+#googleMap)\s*\{(.*?)\}',
+              styles,
+              flags=re.S,
+          )
+          if not map_rule_match:
+              raise RuntimeError('Validaciones fallidas: regla CSS principal del mapa')
+
+          map_rule = map_rule_match.group(1)
+          has_red_border = bool(re.search(
+              r'border\s*:\s*(?:2|3|4)px\s+solid\s+#(?:d1131b|D1131B|d1131b)\s*!important',
+              map_rule,
+              flags=re.I,
+          ))
+          has_box_sizing = 'box-sizing:border-box' in re.sub(r'\s+', '', map_rule).lower()
+          has_overflow_hidden = 'overflow:hidden' in re.sub(r'\s+', '', map_rule).lower()
+
+          # Los contenedores externos no deben dibujar otro borde.
+          wrappers_rule = re.findall(
+              r'(?:\.map-card|\.map-frame|\.map-panel)[^{]*\{(.*?)\}',
+              styles,
+              flags=re.S,
+          )
+          wrappers_borderless = any(
+              re.search(r'border\s*:\s*0\s*!important', rule, flags=re.I)
+              for rule in wrappers_rule
+          )
 
           checks = {
               'círculo de precio': 'priceMarker(price, favorite)' in controller,
@@ -107,13 +138,17 @@ jobs:
               'filtro abiertas HTML': 'id="mapOpenOnly"' in index,
               'filtro abiertas JS': 'station.isOpen === true' in app,
               'protección de diálogo': 'nativeMapModalObserver' in app,
-              'un único borde rojo': 'Combusplus 9.6.4: un único marco rojo' in styles,
+              'borde rojo del mapa': has_red_border,
+              'mapa recortado': has_overflow_hidden,
+              'medidas incluyen borde': has_box_sizing,
+              'sin segundo borde exterior': wrappers_borderless,
           }
+
           failed = [name for name, ok in checks.items() if not ok]
           if failed:
               raise RuntimeError('Validaciones fallidas: ' + ', '.join(failed))
 
-          print('Mapa, marcadores de precio y filtro validados')
+          print('Mapa, marcadores de precio, filtro y marco validados')
           PY
 
       - name: Comprobar script Python
