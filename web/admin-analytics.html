@@ -1,44 +1,59 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Combusplus · Analítica</title>
-<style>
-body{font-family:system-ui;background:#111318;color:#fff;margin:0;padding:24px}.wrap{max-width:1100px;margin:auto}
-.card{background:#1b1e25;border:1px solid #30343d;border-radius:18px;padding:20px;margin:14px 0}
-input,button{font:inherit;padding:12px;border-radius:10px;border:1px solid #444}input{width:min(500px,100%);background:#0f1115;color:#fff}button{background:#c21822;color:#fff;border:0;font-weight:700;cursor:pointer}button:disabled{opacity:.6;cursor:wait}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.metric strong{font-size:2rem}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #30343d;font-size:.9rem}
-small{color:#aeb3bd}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Combusplus · Panel de administración</title>
+  <style>
+    body{font-family:system-ui;background:#111318;color:#fff;margin:0;padding:24px}
+    .wrap{max-width:1100px;margin:auto}
+    .card{background:#1b1e25;border:1px solid #30343d;border-radius:18px;padding:20px;margin:14px 0}
+    input,button{font:inherit;padding:12px;border-radius:10px;border:1px solid #444}
+    input{width:min(500px,100%);background:#0f1115;color:#fff}
+    button{background:#c21822;color:#fff;border:0;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.6;cursor:wait}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .metric strong{display:block;font-size:2rem;margin-top:8px}
+    table{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:10px;border-bottom:1px solid #30343d;font-size:.9rem}
+    small{color:#aeb3bd}
+    #msg{min-height:24px;color:#ffd166}
+  </style>
 </head>
-<body><div class="wrap">
-<h1>Panel de uso Combusplus</h1>
-<p><small>Datos técnicos seudónimos de usuarios que aceptaron las estadísticas.</small></p>
-<div class="card"><input id="token" type="password" placeholder="Token de administrador"><button id="load" type="button">Cargar panel</button><p id="msg"></p></div>
-<div id="content" hidden>
-<div class="grid" id="metrics"></div>
-<div class="card"><h2>Distribución</h2><div class="grid"><div><h3>Plataformas</h3><div id="platforms"></div></div><div><h3>Dispositivos</h3><div id="devices"></div></div><div><h3>Ciudades aproximadas</h3><div id="cities"></div></div></div></div>
-<div class="card"><h2>Instalaciones recientes</h2><table><thead><tr><th>Instalación</th><th>Plataforma</th><th>Dispositivo</th><th>Versión</th><th>Ciudad</th><th>Última actividad</th></tr></thead><tbody id="rows"></tbody></table></div>
-</div></div>
-<script src="./config.js"></script><script>
-const $=s=>document.querySelector(s);
-const list=v=>(v||[]).map(x=>`<div>${String(x[0])}: <strong>${x[1]}</strong></div>`).join('');
-$('#load').onclick=async()=>{
- const base=String(window.COMBUSPLUS_CONFIG?.supabaseFunctionsUrl||'').replace(/\\/$/,'');
- const token=$('#token').value.trim(); $('#msg').textContent='Cargando…';
- try{
-  const r=await fetch(base+'/admin-analytics',{headers:{'x-combusplus-admin':token}});
-  const d=await r.json(); if(!r.ok) throw new Error(d.error||'Error');
-  $('#msg').textContent=''; $('#content').hidden=false;
-  $('#metrics').innerHTML=[
-   ['Instalaciones con analítica',d.totals.installations],
-   ['Conectados ahora',d.totals.activeNow],
-   ['Eventos 24 h',d.totals.events24h],
-   ['Eventos 30 días',d.totals.events30d]
-  ].map(x=>`<div class="card metric"><small>${x[0]}</small><strong>${x[1]}</strong></div>`).join('');
-  $('#platforms').innerHTML=list(d.byPlatform);$('#devices').innerHTML=list(d.byDevice);$('#cities').innerHTML=list(d.byCity);
-  $('#rows').innerHTML=(d.installations||[]).map(x=>`<tr><td>${x.installation}</td><td>${x.platform||''}</td><td>${x.device||''}</td><td>${x.version||''}</td><td>${x.city||''}</td><td>${new Date(x.lastSeenAt).toLocaleString()}</td></tr>`).join('');
- }catch(e){$('#msg').textContent=e.message}
-};
-</script></body></html>
+<body>
+  <div class="wrap">
+    <h1>Panel de uso Combusplus</h1>
+    <p><small>Datos técnicos seudónimos de usuarios que aceptaron las estadísticas.</small></p>
+
+    <div class="card">
+      <input id="token" type="password" placeholder="Token de administrador" autocomplete="off">
+      <button id="load" type="button">Cargar panel</button>
+      <p id="msg">Introduce el token y pulsa «Cargar panel».</p>
+    </div>
+
+    <div id="content" hidden>
+      <div class="grid" id="metrics"></div>
+
+      <div class="card">
+        <h2>Distribución</h2>
+        <div class="grid">
+          <div><h3>Plataformas</h3><div id="platforms"></div></div>
+          <div><h3>Dispositivos</h3><div id="devices"></div></div>
+          <div><h3>Ciudades aproximadas</h3><div id="cities"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Instalaciones recientes</h2>
+        <table>
+          <thead><tr><th>Instalación</th><th>Plataforma</th><th>Dispositivo</th><th>Versión</th><th>Ciudad</th><th>Última actividad</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./src/admin-analytics.js"></script>
+</body>
+</html>

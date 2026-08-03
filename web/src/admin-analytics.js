@@ -26,7 +26,6 @@ async function loadPanel() {
     message.textContent = 'Introduce el token de administrador.';
     return;
   }
-
   if (!base) {
     message.textContent = 'La URL del backend no está configurada en config.js.';
     return;
@@ -54,7 +53,7 @@ async function loadPanel() {
     });
 
     const raw = await response.text();
-    let data;
+    let data = {};
     try {
       data = raw ? JSON.parse(raw) : {};
     } catch {
