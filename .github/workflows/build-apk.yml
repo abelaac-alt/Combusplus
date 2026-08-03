@@ -28,6 +28,9 @@ jobs:
       - name: Fijar mapa dentro del recuadro
         run: python scripts/fix-embedded-map-position.py
 
+      - name: Optimizar mapa y cargar cercanas
+        run: python scripts/optimize-nearby-map.py
+
       - name: Configurar Java 17
         uses: actions/setup-java@v5
         with:
@@ -90,10 +93,10 @@ jobs:
           mkdir -p release
           cp \
             android/app/build/outputs/apk/debug/app-debug.apk \
-            release/Combusplus-v9.5.2-debug.apk
+            release/Combusplus-v9.6-debug.apk
           sha256sum \
-            release/Combusplus-v9.5.2-debug.apk \
-            > release/Combusplus-v9.5.2-debug.apk.sha256
+            release/Combusplus-v9.6-debug.apk \
+            > release/Combusplus-v9.6-debug.apk.sha256
 
       - name: Subir APK
         uses: actions/upload-artifact@v7

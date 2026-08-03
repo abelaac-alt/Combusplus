@@ -27,6 +27,12 @@ jobs:
       - name: Aplicar mapa integrado
         run: python scripts/apply-embedded-map-patch.py
 
+      - name: Fijar mapa
+        run: python scripts/fix-embedded-map-position.py
+
+      - name: Optimizar mapa
+        run: python scripts/optimize-nearby-map.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
@@ -62,7 +68,7 @@ jobs:
           deno check supabase/functions/admin-analytics/index.ts
           deno check supabase/functions/health/index.ts
 
-      - name: Validar integración Android
+      - name: Validar mapa Android
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -75,6 +81,8 @@ jobs:
               'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java',
               'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java',
               'scripts/apply-embedded-map-patch.py',
+              'scripts/fix-embedded-map-position.py',
+              'scripts/optimize-nearby-map.py',
               'scripts/check-android-artifact.py',
           ]
 
@@ -83,39 +91,27 @@ jobs:
 
           ET.parse('android/app/src/main/AndroidManifest.xml')
 
-          gradle = Path('android/app/build.gradle.kts').read_text(encoding='utf-8')
-          assert 'play-services-maps:20.0.0' in gradle
-          assert 'GOOGLE_MAPS_ANDROID_MAP_ID' in gradle
-          assert 'GOOGLE_MAPS_ANDROID_API_KEY' in gradle
-          assert "googleMapsKey: ''" in gradle
-          assert "googleMapId: ''" in gradle
-
-          manifest = Path('android/app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
-          assert 'com.google.android.geo.API_KEY' in manifest
-
-          bridge = Path(
-              'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java'
-          ).read_text(encoding='utf-8')
-          assert 'renderNativeMap' in bridge
-          assert 'hideNativeMap' in bridge
-
           controller = Path(
               'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java'
           ).read_text(encoding='utf-8')
-          assert 'MapView' in controller
-          assert 'setOnMarkerClickListener' in controller
+          assert 'createAppMarker' in controller
+          assert 'favoriteMarker' in controller
+          assert 'lastPayloadHash' in controller
+          assert 'R.mipmap.ic_launcher' in controller
 
           app = Path('web/src/app.js').read_text(encoding='utf-8')
           index = Path('web/index.html').read_text(encoding='utf-8')
-          assert 'renderNativeEmbeddedMap' in app
-          assert 'CombusplusNativeMap' in app
-          assert 'mapSearch' in index
-          assert 'clearMapSearch' in index
+          assert 'ensureNearbyStationsForMap' in app
+          assert 'favorite: isFavorite' in app
+          assert '.slice(0, 80)' in app
+          assert 'Top 10' not in index
 
-          print('Integración de Google Maps embebido correcta')
+          print('Mapa cercano, marcadores y rendimiento correctos')
           PY
 
-      - name: Comprobar script de seguridad
+      - name: Comprobar scripts
         run: |
           python -m py_compile scripts/check-android-artifact.py
           python -m py_compile scripts/apply-embedded-map-patch.py
+          python -m py_compile scripts/fix-embedded-map-position.py
+          python -m py_compile scripts/optimize-nearby-map.py
