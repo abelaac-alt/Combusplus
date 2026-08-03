@@ -26,6 +26,7 @@ jobs:
       SYNC_POINTS_JSON: ${{ secrets.COMBUSPLUS_SYNC_POINTS_JSON }}
       DEVICE_TOKEN_SECRET: ${{ secrets.COMBUSPLUS_DEVICE_TOKEN_SECRET }}
       RATE_LIMIT_SALT: ${{ secrets.COMBUSPLUS_RATE_LIMIT_SALT }}
+      ADMIN_DASHBOARD_TOKEN: ${{ secrets.COMBUSPLUS_ADMIN_TOKEN }}
       PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON }}
       ALLOWED_ORIGINS: ${{ vars.COMBUSPLUS_ALLOWED_ORIGINS }}
       PLAY_INTEGRITY_MODE: ${{ vars.PLAY_INTEGRITY_MODE }}
@@ -51,7 +52,8 @@ jobs:
           required=(
             SUPABASE_ACCESS_TOKEN PROJECT_ID SUPABASE_DB_PASSWORD
             PRECIOIL_API_KEY SYNC_SECRET SYNC_POINTS_JSON
-            DEVICE_TOKEN_SECRET RATE_LIMIT_SALT ALLOWED_ORIGINS
+            DEVICE_TOKEN_SECRET RATE_LIMIT_SALT ADMIN_DASHBOARD_TOKEN
+            ALLOWED_ORIGINS
           )
           for name in "${required[@]}"; do
             test -n "${!name:-}" || { echo "::error::$name no está configurado."; exit 1; }
@@ -62,10 +64,11 @@ jobs:
           }
           test "${#DEVICE_TOKEN_SECRET}" -ge 64 || { echo "::error::COMBUSPLUS_DEVICE_TOKEN_SECRET debe tener al menos 64 caracteres."; exit 1; }
           test "${#RATE_LIMIT_SALT}" -ge 64 || { echo "::error::COMBUSPLUS_RATE_LIMIT_SALT debe tener al menos 64 caracteres."; exit 1; }
+          test "${#ADMIN_DASHBOARD_TOKEN}" -ge 32 || { echo "::error::COMBUSPLUS_ADMIN_TOKEN debe tener al menos 32 caracteres."; exit 1; }
           test -f supabase/config.toml
           test -f supabase/functions/bootstrap/index.ts
-          test -f supabase/functions/recommend/index.ts
-          test -f supabase/functions/compare-stations/index.ts
+          test -f supabase/functions/admin-analytics/index.ts
+          test -f supabase/functions/analytics-event/index.ts
 
       - name: Enlazar proyecto de Supabase
         run: supabase link --project-ref "$PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
@@ -77,24 +80,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          supabase secrets set --project-ref "$PROJECT_ID" \
-            "PRECIOIL_API_KEY=$PRECIOIL_API_KEY" \
-            "SYNC_SECRET=$SYNC_SECRET" \
-            "SYNC_POINTS_JSON=$SYNC_POINTS_JSON" \
-            "DEVICE_TOKEN_SECRET=$DEVICE_TOKEN_SECRET" \
-            "RATE_LIMIT_SALT=$RATE_LIMIT_SALT" \
-            "ALLOWED_ORIGINS=$ALLOWED_ORIGINS" \
-            "PLAY_INTEGRITY_MODE=${PLAY_INTEGRITY_MODE:-optional}" \
-            "PLAY_INTEGRITY_PACKAGE_NAME=${PLAY_INTEGRITY_PACKAGE_NAME:-com.grupomds.combusplus}" \
-            "DEVICE_TOKEN_TTL_SECONDS=${DEVICE_TOKEN_TTL_SECONDS:-604800}" \
-            "DEVICE_TOKEN_VERSION=1" \
-            "CACHE_MINUTES=15" \
-            "RATE_LIMIT_PER_MINUTE=90" \
-            "EXPOSE_FUNCTION_ERRORS=false"
+          supabase secrets set --project-ref "$PROJECT_ID"             "PRECIOIL_API_KEY=$PRECIOIL_API_KEY"             "SYNC_SECRET=$SYNC_SECRET"             "SYNC_POINTS_JSON=$SYNC_POINTS_JSON"             "DEVICE_TOKEN_SECRET=$DEVICE_TOKEN_SECRET"             "RATE_LIMIT_SALT=$RATE_LIMIT_SALT"             "ADMIN_DASHBOARD_TOKEN=$ADMIN_DASHBOARD_TOKEN"             "ALLOWED_ORIGINS=$ALLOWED_ORIGINS"             "PLAY_INTEGRITY_MODE=${PLAY_INTEGRITY_MODE:-optional}"             "PLAY_INTEGRITY_PACKAGE_NAME=${PLAY_INTEGRITY_PACKAGE_NAME:-com.grupomds.combusplus}"             "DEVICE_TOKEN_TTL_SECONDS=${DEVICE_TOKEN_TTL_SECONDS:-604800}"             "DEVICE_TOKEN_VERSION=1"             "CACHE_MINUTES=15"             "RATE_LIMIT_PER_MINUTE=90"             "EXPOSE_FUNCTION_ERRORS=false"
 
           if [ -n "${PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON:-}" ]; then
-            supabase secrets set --project-ref "$PROJECT_ID" \
-              "PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON=$PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON"
+            supabase secrets set --project-ref "$PROJECT_ID"               "PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON=$PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON"
           else
             echo "Play Integrity queda en modo opcional hasta configurar la cuenta de servicio."
           fi
@@ -103,7 +92,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for fn in bootstrap recommend compare-stations stations-nearby station-history sync-stations health; do
+          for fn in bootstrap recommend compare-stations stations-nearby station-history sync-stations analytics-event admin-analytics health; do
+            echo "Desplegando $fn..."
             supabase functions deploy "$fn" --project-ref "$PROJECT_ID" --no-verify-jwt
           done
 
