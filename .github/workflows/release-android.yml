@@ -27,14 +27,8 @@ jobs:
         run: |
           set -euo pipefail
           for value in "$KEYSTORE_B64" "$STORE_PASS" "$KEY_ALIAS_VALUE" "$KEY_PASS"; do
-            test -n "$value" || { echo "::error::Faltan secretos de la clave de subida Android."; exit 1; }
+            test -n "$value" || { echo "::error::Faltan secretos de firma Android."; exit 1; }
           done
-
-      - name: Revisar datos de publicación
-        run: |
-          if [ "${{ vars.PLAY_INTEGRITY_MODE }}" != "enforce" ]; then
-            echo "::warning::Play Integrity no está en modo enforce. Revísalo antes de producción."
-          fi
 
       - name: Configurar Java 17
         uses: actions/setup-java@v5
@@ -60,11 +54,15 @@ jobs:
         env:
           FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          MAPS_ANDROID_KEY: ${{ vars.GOOGLE_MAPS_ANDROID_API_KEY }}
+          MAPS_ANDROID_ID: ${{ vars.GOOGLE_MAPS_ANDROID_MAP_ID }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
           test -n "$FUNCTIONS_URL" || { echo "::error::Falta SUPABASE_FUNCTIONS_URL"; exit 1; }
           test -n "$PUBLISHABLE_KEY" || { echo "::error::Falta SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          test -n "$MAPS_ANDROID_KEY" || { echo "::error::Falta GOOGLE_MAPS_ANDROID_API_KEY"; exit 1; }
+          test -n "$MAPS_ANDROID_ID" || { echo "::error::Falta GOOGLE_MAPS_ANDROID_MAP_ID"; exit 1; }
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/combusplus-upload.jks
           chmod 600 android/combusplus-upload.jks
 
@@ -77,14 +75,23 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          MAPS_ANDROID_KEY: ${{ vars.GOOGLE_MAPS_ANDROID_API_KEY }}
+          MAPS_ANDROID_ID: ${{ vars.GOOGLE_MAPS_ANDROID_MAP_ID }}
           PLAY_PROJECT_NUMBER: ${{ vars.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
         run: |
-          gradle :app:bundleRelease :app:assembleRelease --stacktrace --no-daemon --no-configuration-cache             -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL"             -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY"             -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
+          gradle :app:bundleRelease :app:assembleRelease --stacktrace --no-daemon --no-configuration-cache \
+            -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL" \
+            -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY" \
+            -PGOOGLE_MAPS_ANDROID_API_KEY="$MAPS_ANDROID_KEY" \
+            -PGOOGLE_MAPS_ANDROID_MAP_ID="$MAPS_ANDROID_ID" \
+            -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
 
       - name: Comprobar seguridad del AAB y APK
         run: |
-          python scripts/check-android-artifact.py             android/app/build/outputs/bundle/release/app-release.aab
-          python scripts/check-android-artifact.py             android/app/build/outputs/apk/release/app-release.apk
+          python scripts/check-android-artifact.py \
+            android/app/build/outputs/bundle/release/app-release.aab
+          python scripts/check-android-artifact.py \
+            android/app/build/outputs/apk/release/app-release.apk
 
       - name: Preparar publicación
         run: |

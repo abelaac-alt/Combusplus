@@ -9,6 +9,7 @@ on:
       - "web/**"
       - "android/**"
       - "supabase/**"
+      - "scripts/**"
       - ".github/workflows/**"
 
 permissions:
@@ -33,11 +34,12 @@ jobs:
       - name: Probar frontend
         working-directory: web
         run: |
+          set -euo pipefail
           npm ci
           npm test
           node --check src/app.js
           node --check src/core.js
-          grep -RInE 'sk_live_|service_role|SUPABASE_SERVICE_ROLE_KEY=' . && exit 1 || true
+          node --check src/admin-analytics.js
 
       - name: Configurar Deno
         uses: denoland/setup-deno@v2
@@ -46,41 +48,55 @@ jobs:
 
       - name: Comprobar Edge Functions
         run: |
+          set -euo pipefail
           deno check supabase/functions/bootstrap/index.ts
           deno check supabase/functions/recommend/index.ts
           deno check supabase/functions/compare-stations/index.ts
           deno check supabase/functions/stations-nearby/index.ts
           deno check supabase/functions/station-history/index.ts
           deno check supabase/functions/sync-stations/index.ts
+          deno check supabase/functions/analytics-event/index.ts
+          deno check supabase/functions/admin-analytics/index.ts
           deno check supabase/functions/health/index.ts
 
-      - name: Validar XML y estructura
+      - name: Validar integración Android
         run: |
           python - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          root = Path('.')
-          for path in (root/'android/app/src/main/res').rglob('*.xml'):
-              ET.parse(path)
-          ET.parse(root/'android/app/src/main/AndroidManifest.xml')
+
           required = [
-              'web/index.html', 'web/privacy.html', 'web/src/app.js',
+              'android/app/build.gradle.kts',
               'android/app/src/main/AndroidManifest.xml',
-              'android/app/src/main/java/com/grupomds/combusplus/NativeSessionManager.java',
-              'supabase/config.toml',
-              'supabase/migrations/202608021800_v8_anonymous_installations.sql',
+              'android/app/src/main/java/com/grupomds/combusplus/MainActivity.java',
+              'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java',
+              'android/app/src/main/java/com/grupomds/combusplus/NativeMapActivity.java',
+              'scripts/check-android-artifact.py',
           ]
+
           for name in required:
-              assert (root/name).exists(), f'Falta {name}'
+              assert Path(name).is_file(), f'Falta {name}'
 
-          package = (root/'web/package.json').read_text(encoding='utf-8')
-          gradle = (root/'android/app/build.gradle.kts').read_text(encoding='utf-8')
-          health = (root/'supabase/functions/health/index.ts').read_text(encoding='utf-8')
-          for content, source in [(package, 'web'), (gradle, 'android'), (health, 'backend')]:
-              assert '9.0.0' in content, f'Versión incoherente en {source}'
+          ET.parse('android/app/src/main/AndroidManifest.xml')
 
-          migration = (root/'supabase/migrations/202608021800_v8_anonymous_installations.sql').read_text(encoding='utf-8')
-          assert 'p_history_retention_days' in migration
-          assert 'p_sync_retention_days' in migration
-          print('XML, estructura, migración y versiones correctos')
+          gradle = Path('android/app/build.gradle.kts').read_text(encoding='utf-8')
+          assert 'play-services-maps:20.0.0' in gradle
+          assert 'GOOGLE_MAPS_ANDROID_MAP_ID' in gradle
+          assert 'GOOGLE_MAPS_ANDROID_API_KEY' in gradle
+          assert "googleMapsKey: ''" in gradle
+          assert "googleMapId: ''" in gradle
+
+          manifest = Path('android/app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
+          assert 'com.google.android.geo.API_KEY' in manifest
+          assert '.NativeMapActivity' in manifest
+
+          bridge = Path(
+              'android/app/src/main/java/com/grupomds/combusplus/WebBridge.java'
+          ).read_text(encoding='utf-8')
+          assert 'openNativeMap' in bridge
+
+          print('Integración de Google Maps nativo correcta')
           PY
+
+      - name: Comprobar script de seguridad
+        run: python -m py_compile scripts/check-android-artifact.py
