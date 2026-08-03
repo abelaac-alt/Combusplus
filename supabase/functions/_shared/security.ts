@@ -28,7 +28,7 @@ export function corsHeaders(req: Request): Record<string, string> {
   return {
     'access-control-allow-origin': selected,
     'access-control-allow-headers':
-      'authorization, apikey, content-type, x-combusplus-session, x-combusplus-sync, x-installation-id, x-request-id',
+      'authorization, apikey, content-type, x-combusplus-session, x-combusplus-sync, x-combusplus-admin, x-installation-id, x-request-id',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-max-age': '86400',
     'vary': 'Origin',

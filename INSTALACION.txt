@@ -1,0 +1,17 @@
+COMBUSPLUS 9.2.1 · CORRECCIÓN DEL PANEL
+
+1. Sube todo el contenido de este paquete a la raíz del repositorio.
+2. Ejecuta:
+   - Validar proyecto
+   - Desplegar Supabase
+   - Publicar web
+3. Abre:
+   https://abelaac-alt.github.io/Combusplus/admin-analytics.html
+4. Pulsa Ctrl+F5.
+5. Introduce el valor exacto de COMBUSPLUS_ADMIN_TOKEN.
+
+Correcciones:
+- CORS permite x-combusplus-admin.
+- JavaScript externo y errores visibles.
+- Consulta segura mediante RPC SQL.
+- Se envían apikey y Authorization a Supabase.
