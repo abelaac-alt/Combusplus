@@ -50,7 +50,7 @@ jobs:
 
       - name: Configurar Gradle
         if: matrix.language == 'java-kotlin'
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6.2.0
         with:
           gradle-version: "9.4.1"
           cache-disabled: true
