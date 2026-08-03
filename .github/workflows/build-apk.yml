@@ -7,6 +7,7 @@ on:
     paths:
       - "web/**"
       - "android/**"
+      - "scripts/check-android-artifact.py"
       - ".github/workflows/build-apk.yml"
 
 permissions:
@@ -41,25 +42,14 @@ jobs:
         with:
           gradle-version: "9.4.1"
 
-      - name: Preparar web integrada
+      - name: Validar configuración Android
         env:
           FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
-          GOOGLE_MAPS_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
-          GOOGLE_MAP_ID: ${{ vars.GOOGLE_MAP_ID }}
         run: |
+          set -euo pipefail
           test -n "$FUNCTIONS_URL" || { echo "::error::Falta SUPABASE_FUNCTIONS_URL"; exit 1; }
           test -n "$PUBLISHABLE_KEY" || { echo "::error::Falta SUPABASE_PUBLISHABLE_KEY"; exit 1; }
-          test -n "$GOOGLE_MAPS_KEY" || { echo "::error::Falta GOOGLE_MAPS_API_KEY"; exit 1; }
-          cat > web/config.js <<EOF_CONFIG
-          window.COMBUSPLUS_CONFIG = Object.freeze({
-            version: '9.0.0',
-            supabaseFunctionsUrl: '${FUNCTIONS_URL}',
-            supabasePublishableKey: '${PUBLISHABLE_KEY}',
-            googleMapsKey: '${GOOGLE_MAPS_KEY}',
-            googleMapId: '${GOOGLE_MAP_ID}'
-          });
-          EOF_CONFIG
 
       - name: Compilar APK debug
         working-directory: android
@@ -68,10 +58,11 @@ jobs:
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
           PLAY_PROJECT_NUMBER: ${{ vars.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon \
-            -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL" \
-            -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY" \
-            -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
+          gradle :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache             -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL"             -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY"             -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
+
+      - name: Comprobar seguridad del APK
+        run: |
+          python scripts/check-android-artifact.py             android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Preparar artefacto
         run: |
