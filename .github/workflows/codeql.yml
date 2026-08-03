@@ -7,6 +7,7 @@ on:
     branches: [main]
   schedule:
     - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,10 +18,13 @@ jobs:
     name: Analizar ${{ matrix.language }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
+
     strategy:
       fail-fast: false
       matrix:
-        language: ["java-kotlin", "javascript-typescript"]
+        language:
+          - java-kotlin
+          - javascript-typescript
 
     steps:
       - name: Descargar repositorio
@@ -49,6 +53,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "9.4.1"
+          cache-disabled: true
 
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v4
@@ -59,10 +64,20 @@ jobs:
       - name: Compilar Android para CodeQL
         if: matrix.language == 'java-kotlin'
         working-directory: android
+        env:
+          GRADLE_OPTS: >-
+            -Dorg.gradle.configuration-cache=false
+            -Dorg.gradle.caching=false
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon \
+          gradle :app:assembleDebug \
+            --stacktrace \
+            --no-daemon \
+            --no-configuration-cache \
+            --no-build-cache \
             -PCOMBUSPLUS_FUNCTIONS_URL="" \
             -PCOMBUSPLUS_PUBLISHABLE_KEY="" \
+            -PGOOGLE_MAPS_ANDROID_API_KEY="" \
+            -PGOOGLE_MAPS_ANDROID_MAP_ID="" \
             -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="0"
 
       - name: Analizar
