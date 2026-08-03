@@ -36,25 +36,22 @@ public class WebBridge {
     }
 
     @JavascriptInterface
-    public void openNativeMapAt(double latitude, double longitude) {
-        if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) return;
-        if (
-            latitude < -90d ||
-            latitude > 90d ||
-            longitude < -180d ||
-            longitude > 180d
-        ) {
-            return;
-        }
+    public void renderNativeMap(
+            String stationsJson,
+            double left,
+            double top,
+            double width,
+            double height
+    ) {
+        if (stationsJson == null || stationsJson.length() > 2_000_000) return;
+        activity.runOnUiThread(() ->
+                activity.renderEmbeddedMap(stationsJson, left, top, width, height)
+        );
+    }
 
-        saveLastLocation(latitude, longitude);
-
-        activity.runOnUiThread(() -> {
-            Intent intent = new Intent(activity, NativeMapActivity.class);
-            intent.putExtra("latitude", latitude);
-            intent.putExtra("longitude", longitude);
-            activity.startActivity(intent);
-        });
+    @JavascriptInterface
+    public void hideNativeMap() {
+        activity.runOnUiThread(activity::hideEmbeddedMap);
     }
 
     @JavascriptInterface
