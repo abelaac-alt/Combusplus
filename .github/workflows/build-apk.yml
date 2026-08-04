@@ -50,8 +50,11 @@ jobs:
       - name: Aplicar corrección exacta 10.1
         run: python scripts/apply-v101-exact-map.py
 
-      - name: Aplicar solución web definitiva 10.2
+      - name: Aplicar solución web 10.2
         run: python scripts/apply-v102-web-map.py
+
+      - name: Corregir error y scroll 10.3
+        run: python scripts/apply-v103-fix-error-scroll.py
 
       - name: Configurar Java 17
         uses: actions/setup-java@v5
@@ -84,7 +87,7 @@ jobs:
           PLAY_PROJECT_NUMBER: ${{ vars.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
         run: |
           test -n "$MAPS_WEB_KEY" || {
-            echo "::error::Falta GOOGLE_MAPS_WEB_API_KEY o GOOGLE_MAPS_API_KEY en Variables de Actions."
+            echo "::error::Falta GOOGLE_MAPS_WEB_API_KEY o GOOGLE_MAPS_API_KEY."
             exit 1
           }
 
@@ -102,8 +105,8 @@ jobs:
       - name: Preparar artefacto
         run: |
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v10.2-debug.apk
-          sha256sum release/Combusplus-v10.2-debug.apk > release/Combusplus-v10.2-debug.apk.sha256
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v10.3-debug.apk
+          sha256sum release/Combusplus-v10.3-debug.apk > release/Combusplus-v10.3-debug.apk.sha256
 
       - name: Subir APK
         uses: actions/upload-artifact@v7
