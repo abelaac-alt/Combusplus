@@ -1,0 +1,260 @@
+name: Crear y publicar AAB en Google Play
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "Código de versión. Debe ser superior al publicado en Google Play."
+        required: true
+        default: "50"
+        type: string
+      version_name:
+        description: "Nombre de versión visible."
+        required: true
+        default: "10.5.0"
+        type: string
+      publish:
+        description: "Publicar automáticamente en Google Play."
+        required: true
+        default: false
+        type: boolean
+      track:
+        description: "Canal de Google Play."
+        required: true
+        default: "internal"
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      status:
+        description: "Estado de la versión."
+        required: true
+        default: "draft"
+        type: choice
+        options:
+          - draft
+          - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-play-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v6
+
+      - name: Aplicar mapa integrado
+        run: python scripts/apply-embedded-map-patch.py
+
+      - name: Fijar mapa
+        run: python scripts/fix-embedded-map-position.py
+
+      - name: Optimizar mapa
+        run: python scripts/optimize-nearby-map.py
+
+      - name: Aplicar marcadores y filtro del mapa
+        run: python scripts/fix-map-price-markers-and-filter.py
+
+      - name: Aplicar marco y logotipos
+        run: python scripts/fix-perfect-map-frame-and-branding.py
+
+      - name: Renovar menú y widgets
+        run: python scripts/fix-static-nav-gap-and-widgets.py
+
+      - name: Corregir mapa estático y widgets
+        run: python scripts/fix-map-static-and-widget-actions.py
+
+      - name: Corregir diseño final del mapa
+        run: python scripts/fix-perfect-static-map-layout.py
+
+      - name: Aplicar corrección 10.1
+        run: python scripts/apply-v101-exact-map.py
+
+      - name: Aplicar solución web 10.2
+        run: python scripts/apply-v102-web-map.py
+
+      - name: Corregir scroll 10.3
+        run: python scripts/apply-v103-fix-error-scroll.py
+
+      - name: Corregir carga del mapa 10.4
+        run: python scripts/apply-v104-header-map-load.py
+
+      - name: Aplicar buscadores y descuentos 10.5
+        run: python scripts/apply-v105-search-filters-discounts.py
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Configurar Gradle 9.4.1
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.4.1"
+
+      - name: Validar variables y secretos
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.KEY_ALIAS }}
+          ALIAS_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          PUBLISH: ${{ inputs.publish }}
+          FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
+          PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          MAPS_ANDROID_KEY: ${{ vars.GOOGLE_MAPS_ANDROID_API_KEY }}
+          MAPS_ANDROID_ID: ${{ vars.GOOGLE_MAPS_ANDROID_MAP_ID }}
+          MAPS_WEB_KEY: ${{ vars.GOOGLE_MAPS_WEB_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          test -n "$KEYSTORE_B64" || {
+            echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64."
+            exit 1
+          }
+          test -n "$STORE_PASSWORD" || {
+            echo "::error::Falta el secreto KEYSTORE_PASSWORD."
+            exit 1
+          }
+          test -n "$ALIAS" || {
+            echo "::error::Falta el secreto KEY_ALIAS."
+            exit 1
+          }
+          test -n "$ALIAS_PASSWORD" || {
+            echo "::error::Falta el secreto KEY_PASSWORD."
+            exit 1
+          }
+          test -n "$FUNCTIONS_URL" || {
+            echo "::error::Falta SUPABASE_FUNCTIONS_URL."
+            exit 1
+          }
+          test -n "$PUBLISHABLE_KEY" || {
+            echo "::error::Falta SUPABASE_PUBLISHABLE_KEY."
+            exit 1
+          }
+          test -n "$MAPS_ANDROID_KEY" || {
+            echo "::error::Falta GOOGLE_MAPS_ANDROID_API_KEY."
+            exit 1
+          }
+          test -n "$MAPS_ANDROID_ID" || {
+            echo "::error::Falta GOOGLE_MAPS_ANDROID_MAP_ID."
+            exit 1
+          }
+          test -n "$MAPS_WEB_KEY" || {
+            echo "::error::Falta GOOGLE_MAPS_WEB_API_KEY o GOOGLE_MAPS_API_KEY."
+            exit 1
+          }
+
+          if [ "$PUBLISH" = "true" ]; then
+            test -n "$PLAY_JSON" || {
+              echo "::error::Falta GOOGLE_PLAY_SERVICE_ACCOUNT_JSON para publicar."
+              exit 1
+            }
+          fi
+
+      - name: Restaurar clave de subida
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/combusplus-upload.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "ANDROID_KEYSTORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Crear Android App Bundle firmado
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          FUNCTIONS_URL: ${{ vars.SUPABASE_FUNCTIONS_URL }}
+          PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          MAPS_ANDROID_KEY: ${{ vars.GOOGLE_MAPS_ANDROID_API_KEY }}
+          MAPS_ANDROID_ID: ${{ vars.GOOGLE_MAPS_ANDROID_MAP_ID }}
+          MAPS_WEB_KEY: ${{ vars.GOOGLE_MAPS_WEB_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
+          PLAY_PROJECT_NUMBER: ${{ vars.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
+        run: |
+          set -euo pipefail
+
+          gradle :app:bundleRelease \
+            --stacktrace \
+            --no-daemon \
+            --no-configuration-cache \
+            -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL" \
+            -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY" \
+            -PGOOGLE_MAPS_ANDROID_API_KEY="$MAPS_ANDROID_KEY" \
+            -PGOOGLE_MAPS_ANDROID_MAP_ID="$MAPS_ANDROID_ID" \
+            -PGOOGLE_MAPS_WEB_API_KEY="$MAPS_WEB_KEY" \
+            -PCOMBUSPLUS_VERSION_CODE="${{ inputs.version_code }}" \
+            -PCOMBUSPLUS_VERSION_NAME="${{ inputs.version_name }}" \
+            -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
+
+      - name: Verificar firma del AAB
+        run: |
+          set -euo pipefail
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB"
+          jarsigner -verify -certs "$AAB"
+
+      - name: Preparar archivos de Google Play
+        run: |
+          set -euo pipefail
+          mkdir -p release/google-play
+
+          cp \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            "release/google-play/Combusplus-${{ inputs.version_name }}-${{ inputs.version_code }}.aab"
+
+          if [ -f android/app/build/outputs/mapping/release/mapping.txt ]; then
+            cp \
+              android/app/build/outputs/mapping/release/mapping.txt \
+              release/google-play/mapping.txt
+          fi
+
+          sha256sum \
+            release/google-play/*.aab \
+            > release/google-play/SHA256SUMS.txt
+
+      - name: Guardar AAB para Google Play
+        uses: actions/upload-artifact@v7
+        with:
+          name: Combusplus-Google-Play-${{ inputs.version_name }}-${{ inputs.version_code }}
+          path: release/google-play/*
+          if-no-files-found: error
+          retention-days: 60
+          compression-level: 0
+
+      - name: Publicar en Google Play
+        if: ${{ inputs.publish }}
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.grupomds.combusplus
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          tracks: ${{ inputs.track }}
+          status: ${{ inputs.status }}
+          releaseName: Combusplus ${{ inputs.version_name }}
+          whatsNewDirectory: distribution/whatsnew
+          mappingFile: android/app/build/outputs/mapping/release/mapping.txt
+          changesNotSentForReview: false

@@ -61,6 +61,9 @@ jobs:
       - name: Corregir cabecera y carga del mapa 10.4
         run: python scripts/apply-v104-header-map-load.py
 
+      - name: Aplicar buscadores, filtros y descuentos 10.5
+        run: python scripts/apply-v105-search-filters-discounts.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v7
         with:
@@ -78,49 +81,43 @@ jobs:
           node --check src/core.js
           node --check src/admin-analytics.js
 
-      - name: Validar solución 10.4.2
+      - name: Validar solución 10.5
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
 
           app = Path("web/src/app.js").read_text(encoding="utf-8")
+          index = Path("web/index.html").read_text(encoding="utf-8")
           css = Path("web/assets/styles.css").read_text(encoding="utf-8")
-
-          nearby_definition = re.search(
-              r"(?:async\s+)?function\s+ensureNearbyStationsForMap\s*\(",
-              app,
-          )
-
-          load_maps_definition = re.search(
-              r"(?:async\s+)?function\s+loadGoogleMaps\s*\(",
-              app,
-          )
-
-          render_map_definition = re.search(
-              r"async\s+function\s+renderMap\s*\(",
-              app,
-          )
+          gradle = Path("android/app/build.gradle.kts").read_text(encoding="utf-8")
 
           checks = {
-              "función de carga cercana disponible":
-                  nearby_definition is not None,
-              "cargador Google Maps disponible":
-                  load_maps_definition is not None,
-              "renderizado del mapa disponible":
-                  render_map_definition is not None,
-              "uso de carga cercana":
-                  "ensureNearbyStationsForMap(" in app,
-              "reintento funcional":
-                  "state.mapsPromise = null" in app and
-                  "renderMap(true)" in app,
-              "cabecera con margen":
-                  "Combusplus 10.4: cabecera alineada" in css,
-              "mapa con altura definida":
-                  (
-                      "height:440px !important" in css or
-                      "height:420px !important" in css
-                  ),
+              "buscador del mapa":
+                  'id="mapSearch"' in index and
+                  "el.mapSearch?.addEventListener" in app,
+              "filtro de nombre en mejor búsqueda":
+                  'id="quickStationQuery"' in index and
+                  "stationQuery:" in app,
+              "filtro de abiertas en mejor búsqueda":
+                  'id="quickOpenOnly"' in index and
+                  "openOnly:" in app,
+              "filtro local de resultados":
+                  "stationMatchesBestFiltersV105" in app,
+              "descuento visible":
+                  'id="bestDiscountBadge"' in index and
+                  "discountDisplayV105" in app,
+              "estilo de descuento":
+                  ".best-discount-badge" in css,
+              "versionCode configurable":
+                  "COMBUSPLUS_VERSION_CODE" in gradle,
+              "versionName configurable":
+                  "COMBUSPLUS_VERSION_NAME" in gradle,
+              "mapa Google disponible":
+                  re.search(
+                      r"(?:async\s+)?function\s+loadGoogleMaps\s*\(",
+                      app,
+                  ) is not None,
           }
 
           failed = [
@@ -131,11 +128,14 @@ jobs:
 
           if failed:
               raise RuntimeError(
-                  "Validaciones fallidas: " + ", ".join(failed)
+                  "Validaciones fallidas: " +
+                  ", ".join(failed)
               )
 
-          print("Combusplus 10.4.2 validado correctamente")
+          print("Combusplus 10.5 validado correctamente")
           PY
 
       - name: Comprobar script Python
-        run: python -m py_compile scripts/apply-v104-header-map-load.py
+        run: |
+          python -m py_compile \
+            scripts/apply-v105-search-filters-discounts.py
