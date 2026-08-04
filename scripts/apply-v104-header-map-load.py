@@ -175,7 +175,24 @@ load_function = """function loadGoogleMaps() {
   return state.mapsPromise;
 }"""
 
-app = replace_fn(app, 'loadGoogleMaps', load_function)
+if (
+    'function loadGoogleMaps(' in app or
+    'async function loadGoogleMaps(' in app
+):
+    app = replace_fn(app, 'loadGoogleMaps', load_function)
+else:
+    markers = [
+        'async function renderMap(',
+        'function renderMap(',
+    ]
+    positions = [app.find(marker) for marker in markers]
+    position = next((value for value in positions if value >= 0), -1)
+    if position < 0:
+        raise RuntimeError(
+            'No se encontró loadGoogleMaps ni un punto válido antes de renderMap'
+        )
+    app = app[:position] + load_function + '\n\n' + app[position:]
+
 
 render_function = """async function renderMap(force = false) {
   try {
@@ -303,6 +320,19 @@ app = app.replace(
     "el.refreshMap?.addEventListener('click', () => renderMap());",
     "el.refreshMap?.addEventListener('click', () => renderMap(true));"
 )
+
+if 'combusplusV104RefreshHandler' not in app:
+    app += '''
+
+const combusplusV104RefreshHandler = event => {
+  if (event.target?.closest?.('#refreshMap')) {
+    state.mapsPromise = null;
+    renderMap(true);
+  }
+};
+document.addEventListener('click', combusplusV104RefreshHandler);
+'''
+
 APP.write_text(app, encoding='utf-8')
 
 css = CSS.read_text(encoding='utf-8')
