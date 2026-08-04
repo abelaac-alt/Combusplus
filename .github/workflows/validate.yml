@@ -45,6 +45,9 @@ jobs:
       - name: Corregir mapa estático y widgets
         run: python scripts/fix-map-static-and-widget-actions.py
 
+      - name: Corregir diseño final del mapa
+        run: python scripts/fix-perfect-static-map-layout.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
@@ -161,4 +164,33 @@ jobs:
               )
 
           print("Actualización Combusplus 9.8 correcta")
+          PY
+
+      - name: Validar actualización 9.9
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          controller = Path(
+              'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java'
+          ).read_text(encoding='utf-8')
+          app = Path('web/src/app.js').read_text(encoding='utf-8')
+          css = Path('web/assets/styles.css').read_text(encoding='utf-8')
+
+          checks = {
+              'escala real del WebView': 'float scale = webView.getScale();' in controller,
+              'marcadores totalmente circulares': 'Bitmap.createBitmap(size, size' in controller and 'canvas.drawCircle' in controller,
+              'colores de marcadores': 'favorite ? 0xFFFFC107 : 0xFFD71920' in controller,
+              'mapa centrado en el marco': 'positionExactly' in controller,
+              'cabecera medida dinámicamente': 'applyExactShellMetricsV99' in app,
+              'menú inferior medido dinámicamente': "--cp-live-nav" in css,
+              'pantalla mapa fija': '.page[data-page="map"]{' in css and 'position:fixed !important' in css,
+              'mapa ocupa la última fila': 'grid-template-rows:auto auto auto auto minmax(220px,1fr)' in css,
+          }
+
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise RuntimeError('Validaciones fallidas: ' + ', '.join(failed))
+
+          print('Combusplus 9.9 validado correctamente')
           PY
