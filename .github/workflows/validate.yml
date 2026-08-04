@@ -62,7 +62,7 @@ jobs:
         run: python scripts/apply-v104-header-map-load.py
 
       - name: Configurar Node 24
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
