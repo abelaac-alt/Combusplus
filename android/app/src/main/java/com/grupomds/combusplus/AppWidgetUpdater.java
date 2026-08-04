@@ -102,18 +102,7 @@ public final class AppWidgetUpdater {
                 R.id.favorite_change_3
         };
 
-        JSONArray favorites = new JSONArray();
-        try {
-            JSONObject config = new JSONObject(
-                    SecureLocalStore.getString(
-                            context,
-                            PriceWatchScheduler.CONFIG,
-                            "{}"
-                    )
-            );
-            JSONArray stored = config.optJSONArray("favorites");
-            if (stored != null) favorites = stored;
-        } catch (Exception ignored) {}
+        JSONArray favorites = readFavorites(context);
 
         for (int index = 0; index < 3; index++) {
             if (index >= favorites.length()) {
@@ -229,6 +218,37 @@ public final class AppWidgetUpdater {
         views.setOnClickPendingIntent(R.id.widget_full_tank_root, action);
         views.setOnClickPendingIntent(R.id.widget_full_tank_button, action);
         return views;
+    }
+
+    private static JSONArray readFavorites(Context context) {
+        JSONArray favorites = new JSONArray();
+
+        try {
+            String configText = SecureLocalStore.getString(
+                    context,
+                    PriceWatchScheduler.CONFIG,
+                    "{}"
+            );
+            JSONObject config = new JSONObject(configText);
+            JSONArray configured = config.optJSONArray("favorites");
+            if (configured != null && configured.length() > 0) {
+                return configured;
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            String directText = SecureLocalStore.getString(
+                    context,
+                    "combusplus.v5.favorites",
+                    "[]"
+            );
+            JSONArray direct = new JSONArray(directText);
+            if (direct.length() > 0) return direct;
+        } catch (Exception ignored) {
+        }
+
+        return favorites;
     }
 
     private static PendingIntent refreshIntent(Context context) {
