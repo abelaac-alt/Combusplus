@@ -66,7 +66,7 @@ final class EmbeddedMapController {
         container.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(18));
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(16));
             }
         });
 
@@ -96,7 +96,7 @@ final class EmbeddedMapController {
         loading.setText("Cargando gasolineras…");
         loading.setTextColor(Color.WHITE);
         loading.setBackgroundColor(0xCC111318);
-        loading.setPadding(dp(14), dp(10), dp(14), dp(10));
+        loading.setPadding(dp(14), dp(9), dp(14), dp(9));
         container.addView(
                 loading,
                 new FrameLayout.LayoutParams(
@@ -160,12 +160,21 @@ final class EmbeddedMapController {
     }
 
     private boolean positionExactly(double leftCss, double topCss, double widthCss, double heightCss) {
-        float density = activity.getResources().getDisplayMetrics().density;
+        /*
+         * getBoundingClientRect() entrega píxeles CSS. Para ubicar una vista
+         * nativa sobre el WebView se debe usar la escala real del WebView,
+         * no la densidad física del dispositivo. Esta diferencia era la que
+         * desplazaba el mapa respecto al marco rojo.
+         */
+        float scale = webView.getScale();
+        if (!Float.isFinite(scale) || scale <= 0f) {
+            scale = activity.getResources().getDisplayMetrics().density;
+        }
 
-        int left = webView.getLeft() + Math.round((float) leftCss * density);
-        int top = webView.getTop() + Math.round((float) topCss * density);
-        int width = Math.max(dp(220), Math.round((float) widthCss * density));
-        int height = Math.max(dp(220), Math.round((float) heightCss * density));
+        int left = webView.getLeft() + Math.round((float) leftCss * scale);
+        int top = webView.getTop() + Math.round((float) topCss * scale);
+        int width = Math.max(dp(180), Math.round((float) widthCss * scale));
+        int height = Math.max(dp(180), Math.round((float) heightCss * scale));
 
         int viewportLeft = webView.getLeft();
         int viewportTop = webView.getTop();
@@ -187,8 +196,7 @@ final class EmbeddedMapController {
                 width != lastWidth ||
                 height != lastHeight
         ) {
-            FrameLayout.LayoutParams params =
-                    new FrameLayout.LayoutParams(width, height);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
             params.leftMargin = left;
             params.topMargin = top;
             container.setLayoutParams(params);
@@ -251,11 +259,7 @@ final class EmbeddedMapController {
             added++;
         }
 
-        loading.setText(
-                added == 0
-                        ? "No hay gasolineras en esta zona."
-                        : added + " gasolineras"
-        );
+        loading.setText(added == 0 ? "No hay gasolineras en esta zona." : added + " gasolineras");
         loading.setVisibility(added == 0 ? View.VISIBLE : View.GONE);
 
         if (hasBounds) {
@@ -264,7 +268,7 @@ final class EmbeddedMapController {
                     map.moveCamera(
                             CameraUpdateFactory.newLatLngBounds(
                                     bounds.build(),
-                                    dp(42)
+                                    dp(38)
                             )
                     );
                 } catch (Exception ignored) {
@@ -279,42 +283,35 @@ final class EmbeddedMapController {
         BitmapDescriptor cached = markerCache.get(key);
         if (cached != null) return cached;
 
-        int width = dp(78);
-        int height = dp(50);
-        Bitmap bitmap = Bitmap.createBitmap(
-                width,
-                height,
-                Bitmap.Config.ARGB_8888
-        );
+        int size = dp(58);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
+
+        Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        shadow.setColor(0x33000000);
+        canvas.drawCircle(size / 2f, size / 2f + dp(1), size / 2f - dp(2), shadow);
 
         Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
         fill.setColor(favorite ? 0xFFFFC107 : 0xFFD71920);
-
-        RectF oval = new RectF(dp(2), dp(2), width - dp(2), height - dp(2));
-        canvas.drawOval(oval, fill);
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f - dp(3), fill);
 
         Paint border = new Paint(Paint.ANTI_ALIAS_FLAG);
         border.setStyle(Paint.Style.STROKE);
         border.setStrokeWidth(dp(2));
         border.setColor(Color.WHITE);
-        canvas.drawOval(oval, border);
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f - dp(3), border);
 
         Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-        text.setColor(favorite ? 0xFF17191D : Color.WHITE);
+        text.setColor(favorite ? 0xFF16181C : Color.WHITE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setFakeBoldText(true);
-        text.setTextSize(dp(label.length() > 7 ? 12 : 14));
+        text.setTextSize(dp(label.length() > 7 ? 10 : 11));
 
         Paint.FontMetrics metrics = text.getFontMetrics();
-        float baseline =
-                height / 2f -
-                (metrics.ascent + metrics.descent) / 2f;
+        float baseline = size / 2f - (metrics.ascent + metrics.descent) / 2f;
+        canvas.drawText(label, size / 2f, baseline, text);
 
-        canvas.drawText(label, width / 2f, baseline, text);
-
-        BitmapDescriptor descriptor =
-                BitmapDescriptorFactory.fromBitmap(bitmap);
+        BitmapDescriptor descriptor = BitmapDescriptorFactory.fromBitmap(bitmap);
         markerCache.put(key, descriptor);
         return descriptor;
     }
@@ -325,17 +322,11 @@ final class EmbeddedMapController {
                 .replace("€", "")
                 .trim();
 
-        if (text.isEmpty() || "Sin precio".equalsIgnoreCase(text)) {
-            return "—";
-        }
+        if (text.isEmpty() || "Sin precio".equalsIgnoreCase(text)) return "—";
 
         try {
             double number = Double.parseDouble(text.replace(",", "."));
-            return String.format(
-                    Locale.forLanguageTag("es-ES"),
-                    "%.3f€",
-                    number
-            );
+            return String.format(Locale.forLanguageTag("es-ES"), "%.3f€", number);
         } catch (Exception ignored) {
             return text.length() > 8 ? text.substring(0, 8) : text;
         }
@@ -372,9 +363,7 @@ final class EmbeddedMapController {
     }
 
     private int dp(int value) {
-        return Math.round(
-                value * activity.getResources().getDisplayMetrics().density
-        );
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
     private static String join(String... values) {
