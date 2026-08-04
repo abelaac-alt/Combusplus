@@ -40,7 +40,7 @@ jobs:
 
       - name: Configurar Android SDK
         if: matrix.language == 'java-kotlin'
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Instalar Android SDK
         if: matrix.language == 'java-kotlin'
