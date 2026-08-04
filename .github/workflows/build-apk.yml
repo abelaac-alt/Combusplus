@@ -56,6 +56,9 @@ jobs:
       - name: Corregir error y scroll 10.3
         run: python scripts/apply-v103-fix-error-scroll.py
 
+      - name: Corregir cabecera y carga del mapa 10.4
+        run: python scripts/apply-v104-header-map-load.py
+
       - name: Configurar Java 17
         uses: actions/setup-java@v5
         with:
@@ -105,8 +108,8 @@ jobs:
       - name: Preparar artefacto
         run: |
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v10.3-debug.apk
-          sha256sum release/Combusplus-v10.3-debug.apk > release/Combusplus-v10.3-debug.apk.sha256
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/Combusplus-v10.4-debug.apk
+          sha256sum release/Combusplus-v10.4-debug.apk > release/Combusplus-v10.4-debug.apk.sha256
 
       - name: Subir APK
         uses: actions/upload-artifact@v7
