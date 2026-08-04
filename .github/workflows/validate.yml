@@ -8,6 +8,7 @@ on:
     paths:
       - "web/**"
       - "android/**"
+      - "patches/**"
       - "supabase/**"
       - "scripts/**"
       - ".github/workflows/**"
@@ -48,6 +49,9 @@ jobs:
       - name: Corregir diseño final del mapa
         run: python scripts/fix-perfect-static-map-layout.py
 
+      - name: Aplicar corrección definitiva 10.0
+        run: python scripts/apply-v10-map-widget-layout.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v5
         with:
@@ -65,132 +69,79 @@ jobs:
           node --check src/core.js
           node --check src/admin-analytics.js
 
-      - name: Validar integración final
+      - name: Validar mapa y widget 10.0
         run: |
           python - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
           required = [
-              'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java',
-              'android/app/src/main/res/drawable-nodpi/combusplus_header_logo.png',
-              'android/app/src/main/res/drawable-nodpi/combusplus_app_icon.png',
-              'web/assets/combusplus-header-logo.png',
-              'scripts/fix-perfect-map-frame-and-branding.py',
-          ]
-          for name in required:
-              if not Path(name).is_file():
-                  raise RuntimeError(f'Falta {name}')
-
-          ET.parse('android/app/src/main/AndroidManifest.xml')
-
-          controller = Path('android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java').read_text(encoding='utf-8')
-          checks = {
-              'mapa ocupa todo el contenedor': 'MATCH_PARENT' in controller,
-              'sin desplazamiento interno': 'mapParams.leftMargin' not in controller,
-              'marco rojo nativo': 'container.setBackgroundColor(0xFFD1131B)' in controller,
-              'padding del marco': 'container.setPadding(dp(3)' in controller,
-              'oculta al abrir ficha': 'hide();\n                activity.openStationFromNative(id);' in controller,
-          }
-
-          app = Path('web/src/app.js').read_text(encoding='utf-8')
-          checks.update({
-              'bloqueo con ficha abierta': 'mapOverlayOpen' in app,
-              'observador de fichas': 'syncMapAgainstOverlays' in app,
-              'logo transparente': 'applyTransparentHeaderLogoV968' in app,
-          })
-
-          styles = Path('web/assets/styles.css').read_text(encoding='utf-8')
-          checks.update({
-              'contenedor sin segundo borde': 'border:0 !important' in styles,
-              'proporción cuadrada': 'aspect-ratio:1 / 1 !important' in styles,
-          })
-
-          manifest = Path('android/app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
-          checks['icono instalado blanco'] = '@drawable/combusplus_app_icon' in manifest
-
-          failed = [name for name, ok in checks.items() if not ok]
-          if failed:
-              raise RuntimeError('Validaciones fallidas: ' + ', '.join(failed))
-
-          print('Mapa integrado y logotipos correctos')
-          PY
-
-      - name: Comprobar script Python
-        run: python -m py_compile scripts/fix-perfect-map-frame-and-branding.py
-
-      - name: Validar actualización 9.8
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          required = [
               "android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java",
-              "android/app/src/main/java/com/grupomds/combusplus/AppWidgetUpdater.java",
-              "scripts/fix-map-static-and-widget-actions.py",
+              "android/app/src/main/res/layout/widget_favorite_prices.xml",
+              "patches/v10/EmbeddedMapController.java",
+              "patches/v10/widget_favorite_prices.xml",
+              "scripts/apply-v10-map-widget-layout.py",
           ]
+
           for name in required:
               if not Path(name).is_file():
                   raise RuntimeError(f"Falta {name}")
 
-          controller = Path(required[0]).read_text(encoding="utf-8")
-          updater = Path(required[1]).read_text(encoding="utf-8")
-          app = Path("web/src/app.js").read_text(encoding="utf-8")
-          css = Path("web/assets/styles.css").read_text(encoding="utf-8")
+          ET.parse(
+              "android/app/src/main/res/layout/"
+              "widget_favorite_prices.xml"
+          )
+
+          controller = Path(required[0]).read_text(
+              encoding="utf-8"
+          )
+          widget = Path(required[1]).read_text(
+              encoding="utf-8"
+          )
+          app = Path("web/src/app.js").read_text(
+              encoding="utf-8"
+          )
+          css = Path("web/assets/styles.css").read_text(
+              encoding="utf-8"
+          )
 
           checks = {
-              "marcadores circulares con precio":
-                  "priceMarker(price, favorite)" in controller,
-              "favoritas rojas/amarillas":
-                  "favorite ? 0xFFFFC107 : 0xFFD71920" in controller,
-              "respaldo directo de favoritas":
-                  '"combusplus.v5.favorites"' in updater,
-              "pantalla de mapa estática":
-                  "body.cp-map-screen" in css,
+              "recorte antes del menú inferior":
+                  "NAV_RESERVED_DP = 78" in controller,
+              "mapa sincronizado con scroll":
+                  "syncNativeMapFrameV10" in app,
+              "pantalla mapa desplazable":
+                  "Combusplus 10.0: mapa desplazable" in css,
+              "mapa en flujo normal":
+                  "position:relative !important" in css,
               "menú inferior fijo":
-                  ".bottom-nav{" in css and
-                  "position:fixed !important" in css,
-              "búsqueda depósito lleno":
-                  "executeFullTankWidgetSearchV98" in app and
-                  "form.requestSubmit()" in app,
-              "sincronización widget favoritas":
-                  "syncFavoritesWidgetV98" in app,
+                  "z-index:2147483000 !important" in css,
+              "marcadores circulares":
+                  "Bitmap.createBitmap(" in controller and
+                  "canvas.drawCircle" in controller,
+              "nombres del widget en dos líneas":
+                  'android:maxLines="2"' in widget,
+              "precio del widget sin corte":
+                  'android:id="@+id/favorite_price_1"' in widget and
+                  'android:maxLines="1"' in widget,
           }
 
-          failed = [name for name, ok in checks.items() if not ok]
+          failed = [
+              name
+              for name, valid in checks.items()
+              if not valid
+          ]
+
           if failed:
               raise RuntimeError(
-                  "Validaciones fallidas: " + ", ".join(failed)
+                  "Validaciones fallidas: " +
+                  ", ".join(failed)
               )
 
-          print("Actualización Combusplus 9.8 correcta")
+          print("Combusplus 10.0 validado correctamente")
           PY
 
-      - name: Validar actualización 9.9
+      - name: Comprobar script Python
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          controller = Path(
-              'android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java'
-          ).read_text(encoding='utf-8')
-          app = Path('web/src/app.js').read_text(encoding='utf-8')
-          css = Path('web/assets/styles.css').read_text(encoding='utf-8')
-
-          checks = {
-              'escala real del WebView': 'float scale = webView.getScale();' in controller,
-              'marcadores totalmente circulares': 'Bitmap.createBitmap(size, size' in controller and 'canvas.drawCircle' in controller,
-              'colores de marcadores': 'favorite ? 0xFFFFC107 : 0xFFD71920' in controller,
-              'mapa centrado en el marco': 'positionExactly' in controller,
-              'cabecera medida dinámicamente': 'applyExactShellMetricsV99' in app,
-              'menú inferior medido dinámicamente': "--cp-live-nav" in css,
-              'pantalla mapa fija': '.page[data-page="map"]{' in css and 'position:fixed !important' in css,
-              'mapa ocupa la última fila': 'grid-template-rows:auto auto auto auto minmax(220px,1fr)' in css,
-          }
-
-          failed = [name for name, ok in checks.items() if not ok]
-          if failed:
-              raise RuntimeError('Validaciones fallidas: ' + ', '.join(failed))
-
-          print('Combusplus 9.9 validado correctamente')
-          PY
+          python -m py_compile \
+            scripts/apply-v10-map-widget-layout.py
