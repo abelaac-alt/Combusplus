@@ -49,8 +49,8 @@ jobs:
       - name: Corregir diseño final del mapa
         run: python scripts/fix-perfect-static-map-layout.py
 
-      - name: Aplicar corrección definitiva 10.0
-        run: python scripts/apply-v10-map-widget-layout.py
+      - name: Aplicar corrección exacta 10.1
+        run: python scripts/apply-v101-exact-map.py
 
       - name: Configurar Node 24
         uses: actions/setup-node@v5
@@ -69,79 +69,47 @@ jobs:
           node --check src/core.js
           node --check src/admin-analytics.js
 
-      - name: Validar mapa y widget 10.0
+      - name: Validar integración 10.1
         run: |
           python - <<'PY'
           from pathlib import Path
-          import xml.etree.ElementTree as ET
 
-          required = [
-              "android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java",
-              "android/app/src/main/res/layout/widget_favorite_prices.xml",
-              "patches/v10/EmbeddedMapController.java",
-              "patches/v10/widget_favorite_prices.xml",
-              "scripts/apply-v10-map-widget-layout.py",
-          ]
+          files = {
+              "controller": Path("android/app/src/main/java/com/grupomds/combusplus/EmbeddedMapController.java"),
+              "bridge": Path("android/app/src/main/java/com/grupomds/combusplus/WebBridge.java"),
+              "activity": Path("android/app/src/main/java/com/grupomds/combusplus/MainActivity.java"),
+              "app": Path("web/src/app.js"),
+              "css": Path("web/assets/styles.css"),
+          }
+          for name, path in files.items():
+              if not path.is_file():
+                  raise RuntimeError(f"Falta {name}: {path}")
 
-          for name in required:
-              if not Path(name).is_file():
-                  raise RuntimeError(f"Falta {name}")
-
-          ET.parse(
-              "android/app/src/main/res/layout/"
-              "widget_favorite_prices.xml"
-          )
-
-          controller = Path(required[0]).read_text(
-              encoding="utf-8"
-          )
-          widget = Path(required[1]).read_text(
-              encoding="utf-8"
-          )
-          app = Path("web/src/app.js").read_text(
-              encoding="utf-8"
-          )
-          css = Path("web/assets/styles.css").read_text(
-              encoding="utf-8"
-          )
+          controller = files["controller"].read_text(encoding="utf-8")
+          bridge = files["bridge"].read_text(encoding="utf-8")
+          activity = files["activity"].read_text(encoding="utf-8")
+          app = files["app"].read_text(encoding="utf-8")
+          css = files["css"].read_text(encoding="utf-8")
 
           checks = {
-              "recorte antes del menú inferior":
-                  "NAV_RESERVED_DP = 78" in controller,
-              "mapa sincronizado con scroll":
-                  "syncNativeMapFrameV10" in app,
-              "pantalla mapa desplazable":
-                  "Combusplus 10.0: mapa desplazable" in css,
-              "mapa en flujo normal":
-                  "position:relative !important" in css,
-              "menú inferior fijo":
-                  "z-index:2147483000 !important" in css,
-              "marcadores circulares":
-                  "Bitmap.createBitmap(" in controller and
-                  "canvas.drawCircle" in controller,
-              "nombres del widget en dos líneas":
-                  'android:maxLines="2"' in widget,
-              "precio del widget sin corte":
-                  'android:id="@+id/favorite_price_1"' in widget and
-                  'android:maxLines="1"' in widget,
+              "escala por ancho CSS": "webView.getWidth() / viewportWidthCss" in controller,
+              "recorte en el inicio del menú": "navigationTop - dp(1)" in controller,
+              "sin fondo rojo interno": "clipContainer.setBackgroundColor(Color.TRANSPARENT)" in controller,
+              "puente V2": "renderNativeMapV2(" in bridge,
+              "actividad V2": "renderEmbeddedMapV2(" in activity,
+              "rectángulo interior del borde": "borderLeftWidth" in app and "borderTopWidth" in app,
+              "posición del menú enviada a Android": "navigationTop" in app,
+              "marcadores circulares": "canvas.drawCircle" in controller,
+              "menú fijo": "z-index:2147483000" in css,
+              "mapa con borde rojo único": "border:3px solid #d1131b" in css,
           }
 
-          failed = [
-              name
-              for name, valid in checks.items()
-              if not valid
-          ]
-
+          failed = [name for name, ok in checks.items() if not ok]
           if failed:
-              raise RuntimeError(
-                  "Validaciones fallidas: " +
-                  ", ".join(failed)
-              )
+              raise RuntimeError("Validaciones fallidas: " + ", ".join(failed))
 
-          print("Combusplus 10.0 validado correctamente")
+          print("Combusplus 10.1 validado correctamente")
           PY
 
       - name: Comprobar script Python
-        run: |
-          python -m py_compile \
-            scripts/apply-v10-map-widget-layout.py
+        run: python -m py_compile scripts/apply-v101-exact-map.py
