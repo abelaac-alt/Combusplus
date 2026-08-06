@@ -6,12 +6,12 @@ on:
       version_code:
         description: "Código de versión. Debe ser superior al publicado en Google Play."
         required: true
-        default: "50"
+        default: "51"
         type: string
       version_name:
         description: "Nombre de versión visible."
         required: true
-        default: "10.5.0"
+        default: "10.6.0"
         type: string
       publish:
         description: "Publicar automáticamente en Google Play."
@@ -91,6 +91,9 @@ jobs:
 
       - name: Aplicar buscadores y descuentos 10.5
         run: python scripts/apply-v105-search-filters-discounts.py
+
+      - name: Aplicar búsqueda rentable por ruta 10.6
+        run: python scripts/apply-v106-route-profitability.py
 
       - name: Configurar Java 17
         uses: actions/setup-java@v5

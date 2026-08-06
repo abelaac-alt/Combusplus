@@ -64,6 +64,9 @@ jobs:
       - name: Aplicar buscadores, filtros y descuentos 10.5
         run: python scripts/apply-v105-search-filters-discounts.py
 
+      - name: Aplicar búsqueda rentable por ruta 10.6
+        run: python scripts/apply-v106-route-profitability.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v7
         with:
@@ -81,7 +84,7 @@ jobs:
           node --check src/core.js
           node --check src/admin-analytics.js
 
-      - name: Validar solución 10.5
+      - name: Validar solución 10.6
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -113,6 +116,14 @@ jobs:
                   "COMBUSPLUS_VERSION_CODE" in gradle,
               "versionName configurable":
                   "COMBUSPLUS_VERSION_NAME" in gradle,
+              "destino de ruta":
+                  'id="quickDestination"' in index and
+                  "route-recommend" in app,
+              "desvío máximo":
+                  "maxDetourKm" in app,
+              "resumen de ruta":
+                  'id="bestRouteSummary"' in index and
+                  "renderRouteSummaryV106" in app,
               "mapa Google disponible":
                   re.search(
                       r"(?:async\s+)?function\s+loadGoogleMaps\s*\(",
@@ -132,10 +143,19 @@ jobs:
                   ", ".join(failed)
               )
 
-          print("Combusplus 10.5 validado correctamente")
+          print("Combusplus 10.6 validado correctamente")
           PY
+
+      - name: Configurar Deno 2.8.1
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.8.1
+
+      - name: Comprobar función de ruta
+        run: deno check supabase/functions/route-recommend/index.ts
 
       - name: Comprobar script Python
         run: |
           python -m py_compile \
-            scripts/apply-v105-search-filters-discounts.py
+            scripts/apply-v105-search-filters-discounts.py \
+            scripts/apply-v106-route-profitability.py
