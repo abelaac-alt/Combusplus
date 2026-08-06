@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "web/**"
       - "android/**"
@@ -18,12 +19,18 @@ permissions:
 
 jobs:
   validate:
+    name: Validar Combusplus
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v6
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Aplicar mapa integrado
         run: python scripts/apply-embedded-map-patch.py
@@ -68,7 +75,7 @@ jobs:
         run: python scripts/run-v106-safe.py
 
       - name: Configurar Node 24
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -84,10 +91,10 @@ jobs:
           node --check src/core.js
           node --check src/admin-analytics.js
 
-      - name: Configurar Deno 2.8.1
+      - name: Configurar Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.8.1
+          deno-version: "v2.8.1"
 
       - name: Comprobar función de ruta
         run: deno check supabase/functions/route-recommend/index.ts
@@ -123,13 +130,18 @@ jobs:
 
           if failed:
               raise RuntimeError(
-                  "Validaciones fallidas: " +
-                  ", ".join(failed)
+                  "Validaciones fallidas: "
+                  + ", ".join(failed)
               )
 
-          print("Combusplus 10.6.3 validado correctamente")
+          print(
+              "Combusplus 10.6.3 validado correctamente"
+          )
           PY
 
       - name: Comprobar scripts Python
         run: |
-          python -m py_compile             scripts/apply-v105-search-filters-discounts.py             scripts/apply-v106-route-profitability.py             scripts/run-v106-safe.py
+          python -m py_compile \
+            scripts/apply-v105-search-filters-discounts.py \
+            scripts/apply-v106-route-profitability.py \
+            scripts/run-v106-safe.py
