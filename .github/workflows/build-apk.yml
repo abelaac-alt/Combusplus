@@ -65,6 +65,9 @@ jobs:
       - name: Aplicar búsqueda rentable por ruta 10.6
         run: python scripts/apply-v106-route-profitability.py
 
+      - name: Corregir sintaxis de función desestructurada 10.6.1
+        run: python scripts/fix-v106-destructured-function.py
+
       - name: Configurar Java 17
         uses: actions/setup-java@v5
         with:

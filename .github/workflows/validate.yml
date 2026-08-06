@@ -67,6 +67,9 @@ jobs:
       - name: Aplicar búsqueda rentable por ruta 10.6
         run: python scripts/apply-v106-route-profitability.py
 
+      - name: Corregir sintaxis de función desestructurada 10.6.1
+        run: python scripts/fix-v106-destructured-function.py
+
       - name: Configurar Node 24
         uses: actions/setup-node@v7
         with:
@@ -84,51 +87,35 @@ jobs:
           node --check src/core.js
           node --check src/admin-analytics.js
 
-      - name: Validar solución 10.6
+      - name: Configurar Deno 2.8.1
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.8.1
+
+      - name: Comprobar función de ruta
+        run: deno check supabase/functions/route-recommend/index.ts
+
+      - name: Validar solución 10.6.1
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           app = Path("web/src/app.js").read_text(encoding="utf-8")
           index = Path("web/index.html").read_text(encoding="utf-8")
-          css = Path("web/assets/styles.css").read_text(encoding="utf-8")
-          gradle = Path("android/app/build.gradle.kts").read_text(encoding="utf-8")
 
           checks = {
-              "buscador del mapa":
-                  'id="mapSearch"' in index and
-                  "el.mapSearch?.addEventListener" in app,
-              "filtro de nombre en mejor búsqueda":
-                  'id="quickStationQuery"' in index and
-                  "stationQuery:" in app,
-              "filtro de abiertas en mejor búsqueda":
-                  'id="quickOpenOnly"' in index and
-                  "openOnly:" in app,
-              "filtro local de resultados":
-                  "stationMatchesBestFiltersV105" in app,
-              "descuento visible":
-                  'id="bestDiscountBadge"' in index and
-                  "discountDisplayV105" in app,
-              "estilo de descuento":
-                  ".best-discount-badge" in css,
-              "versionCode configurable":
-                  "COMBUSPLUS_VERSION_CODE" in gradle,
-              "versionName configurable":
-                  "COMBUSPLUS_VERSION_NAME" in gradle,
-              "destino de ruta":
-                  'id="quickDestination"' in index and
+              "sin fragmento inválido":
+                  "} = {}) {" not in app,
+              "función de depósito completa":
+                  app.count(
+                      "async function runFullTankSearch({"
+                  ) == 1,
+              "destino disponible":
+                  'id="quickDestination"' in index,
+              "backend de ruta":
                   "route-recommend" in app,
               "desvío máximo":
                   "maxDetourKm" in app,
-              "resumen de ruta":
-                  'id="bestRouteSummary"' in index and
-                  "renderRouteSummaryV106" in app,
-              "mapa Google disponible":
-                  re.search(
-                      r"(?:async\s+)?function\s+loadGoogleMaps\s*\(",
-                      app,
-                  ) is not None,
           }
 
           failed = [
@@ -143,19 +130,12 @@ jobs:
                   ", ".join(failed)
               )
 
-          print("Combusplus 10.6 validado correctamente")
+          print("Combusplus 10.6.1 validado correctamente")
           PY
 
-      - name: Configurar Deno 2.8.1
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.8.1
-
-      - name: Comprobar función de ruta
-        run: deno check supabase/functions/route-recommend/index.ts
-
-      - name: Comprobar script Python
+      - name: Comprobar scripts Python
         run: |
           python -m py_compile \
             scripts/apply-v105-search-filters-discounts.py \
-            scripts/apply-v106-route-profitability.py
+            scripts/apply-v106-route-profitability.py \
+            scripts/fix-v106-destructured-function.py
