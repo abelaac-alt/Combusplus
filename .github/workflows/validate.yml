@@ -67,8 +67,8 @@ jobs:
       - name: Aplicar búsqueda rentable por ruta 10.6
         run: python scripts/apply-v106-route-profitability.py
 
-      - name: Corregir sintaxis de función desestructurada 10.6.1
-        run: python scripts/fix-v106-destructured-function.py
+      - name: Corregir sintaxis definitivamente 10.6.2
+        run: python scripts/fix-v1062-definitive-syntax.py
 
       - name: Configurar Node 24
         uses: actions/setup-node@v7
@@ -95,18 +95,22 @@ jobs:
       - name: Comprobar función de ruta
         run: deno check supabase/functions/route-recommend/index.ts
 
-      - name: Validar solución 10.6.1
+      - name: Validar solución 10.6.2
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           app = Path("web/src/app.js").read_text(encoding="utf-8")
           index = Path("web/index.html").read_text(encoding="utf-8")
 
           checks = {
-              "sin fragmento inválido":
-                  "} = {}) {" not in app,
-              "función de depósito completa":
+              "sin firma residual":
+                  re.search(
+                      r"}\s*=\s*\{\s*\}\s*\)\s*(?:=>\s*)?\{",
+                      app,
+                  ) is None,
+              "función de depósito única":
                   app.count(
                       "async function runFullTankSearch({"
                   ) == 1,
@@ -130,7 +134,7 @@ jobs:
                   ", ".join(failed)
               )
 
-          print("Combusplus 10.6.1 validado correctamente")
+          print("Combusplus 10.6.2 validado correctamente")
           PY
 
       - name: Comprobar scripts Python
@@ -138,4 +142,4 @@ jobs:
           python -m py_compile \
             scripts/apply-v105-search-filters-discounts.py \
             scripts/apply-v106-route-profitability.py \
-            scripts/fix-v106-destructured-function.py
+            scripts/fix-v1062-definitive-syntax.py
