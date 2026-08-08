@@ -50,6 +50,30 @@ public class WebBridge {
     }
 
     @JavascriptInterface
+    public void renderNativeMapV2(
+            String stationsJson,
+            double left,
+            double top,
+            double width,
+            double height,
+            double viewportWidth,
+            double navigationTop
+    ) {
+        if (stationsJson == null || stationsJson.length() > 2_000_000) return;
+        activity.runOnUiThread(() ->
+                activity.renderEmbeddedMapV2(
+                        stationsJson,
+                        left,
+                        top,
+                        width,
+                        height,
+                        viewportWidth,
+                        navigationTop
+                )
+        );
+    }
+
+    @JavascriptInterface
     public void hideNativeMap() {
         activity.runOnUiThread(activity::hideEmbeddedMap);
     }

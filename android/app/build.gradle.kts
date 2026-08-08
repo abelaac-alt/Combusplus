@@ -9,6 +9,8 @@ val publishableKey = providers.gradleProperty("COMBUSPLUS_PUBLISHABLE_KEY").orEl
 val androidMapsApiKey = providers.gradleProperty("GOOGLE_MAPS_ANDROID_API_KEY").orElse("")
 val androidMapId = providers.gradleProperty("GOOGLE_MAPS_ANDROID_MAP_ID").orElse("")
 val playIntegrityProjectNumber = providers.gradleProperty("PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER").orElse("0")
+val releaseVersionCode = providers.gradleProperty("COMBUSPLUS_VERSION_CODE").orElse("52")
+val releaseVersionName = providers.gradleProperty("COMBUSPLUS_VERSION_NAME").orElse("10.6.3")
 val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
 val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
 val keyAliasValue = System.getenv("KEY_ALIAS")
@@ -33,8 +35,8 @@ android {
         applicationId = "com.grupomds.combusplus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "9.4.0"
+        versionCode = releaseVersionCode.get().toInt()
+        versionName = releaseVersionName.get()
 
         buildConfigField("String", "WEB_APP_URL", javaString(webAppUrl.get()))
         buildConfigField("String", "SUPABASE_FUNCTIONS_URL", javaString(functionsUrl.get()))
@@ -55,7 +57,8 @@ android {
 
     sourceSets {
         getByName("main") {
-            assets.setSrcDirs(listOf(generatedWebAssetsDir.get().asFile))
+            assets.directories.clear()
+            assets.directories.add(generatedWebAssetsDir.get().asFile.absolutePath)
         }
     }
 
@@ -116,7 +119,8 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core:1.16.0")
+    implementation("androidx.activity:activity:1.12.4")
+    implementation("androidx.core:core:1.17.0")
     implementation("androidx.work:work-runtime:2.11.2")
     implementation("androidx.webkit:webkit:1.16.0")
     implementation("androidx.car.app:app:1.7.0")
@@ -152,7 +156,7 @@ val syncWebAssets by tasks.registering(Sync::class) {
         configFile.writeText(
             """
             window.COMBUSPLUS_CONFIG = Object.freeze({
-              version: '9.4.0',
+              version: '${jsString(releaseVersionName.get())}',
               supabaseFunctionsUrl: '${jsString(functionsUrl.get())}',
               supabasePublishableKey: '${jsString(publishableKey.get())}',
               googleMapsKey: '',

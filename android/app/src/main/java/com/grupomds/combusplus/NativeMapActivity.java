@@ -30,7 +30,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -206,7 +205,10 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
         connection.setConnectTimeout(12_000);
         connection.setReadTimeout(25_000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroid/9.4.2");
+        connection.setRequestProperty(
+                "User-Agent",
+                "CombusplusAndroid/" + BuildConfig.VERSION_NAME
+        );
         connection.setRequestProperty("x-installation-id", session.installationId);
         connection.setRequestProperty("x-combusplus-session", session.token);
 
@@ -351,7 +353,7 @@ public class NativeMapActivity extends Activity implements OnMapReadyCallback {
     }
 
     private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        return Uri.encode(value);
     }
 
     private static double parseDouble(String value, double fallback) {

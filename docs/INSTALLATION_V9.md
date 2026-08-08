@@ -1,4 +1,4 @@
-# Instalación de Combusplus 9.0
+# Instalación de Combusplus 10.6.3
 
 ## 1. Subir el proyecto
 
@@ -26,10 +26,12 @@ SUPABASE_ACCESS_TOKEN
 SUPABASE_PROJECT_ID
 SUPABASE_DB_PASSWORD
 PRECIOIL_API_KEY
+GOOGLE_ROUTES_API_KEY
 COMBUSPLUS_SYNC_SECRET
 COMBUSPLUS_SYNC_POINTS_JSON
 COMBUSPLUS_DEVICE_TOKEN_SECRET
 COMBUSPLUS_RATE_LIMIT_SALT
+COMBUSPLUS_ADMIN_TOKEN
 ```
 
 Para generar los dos últimos valores en PowerShell:
@@ -66,14 +68,20 @@ En `Actions → Variables` configura:
 ```text
 SUPABASE_FUNCTIONS_URL=https://axdgelkubdwwajgpklan.supabase.co/functions/v1
 SUPABASE_PUBLISHABLE_KEY=<clave pública de Supabase>
-GOOGLE_MAPS_API_KEY=<clave web restringida>
-GOOGLE_MAP_ID=<opcional>
+GOOGLE_MAPS_API_KEY=<clave web restringida por dominio para GitHub Pages>
+GOOGLE_MAP_ID=<Map ID web opcional>
+GOOGLE_MAPS_ANDROID_API_KEY=<clave restringida por paquete y certificado SHA-1/SHA-256>
+GOOGLE_MAPS_ANDROID_MAP_ID=<Map ID de Android>
 COMBUSPLUS_ALLOWED_ORIGINS=https://abelaac-alt.github.io,https://appassets.androidplatform.net
 PLAY_INTEGRITY_MODE=optional
 PLAY_INTEGRITY_PACKAGE_NAME=com.grupomds.combusplus
 PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER=<número del proyecto de Google Cloud o 0>
 DEVICE_TOKEN_TTL_SECONDS=604800
 ```
+
+No reutilices la clave Web dentro de Android. El APK/AAB usa el SDK nativo de
+Maps y el flujo de compilación rechaza artefactos que contengan credenciales
+de Maps JavaScript.
 
 ## 4. Orden de despliegue
 

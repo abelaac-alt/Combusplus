@@ -1,7 +1,6 @@
 package com.grupomds.combusplus;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -17,6 +16,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -27,7 +28,7 @@ import androidx.webkit.WebViewClientCompat;
 
 import org.json.JSONObject;
 
-public class MainActivity extends Activity {
+public class MainActivity extends ComponentActivity {
     private static final int LOCATION_REQUEST = 1001;
     private static final String LOCAL_URL =
             "https://appassets.androidplatform.net/assets/www/index.html";
@@ -45,6 +46,22 @@ public class MainActivity extends Activity {
         SecureLocalStore.migrateLegacy(this);
         NotificationHelper.createChannel(this);
         PriceWatchScheduler.restore(this);
+
+        getOnBackPressedDispatcher().addCallback(
+                this,
+                new OnBackPressedCallback(true) {
+                    @Override
+                    public void handleOnBackPressed() {
+                        if (webView != null && webView.canGoBack()) {
+                            webView.goBack();
+                            return;
+                        }
+
+                        setEnabled(false);
+                        getOnBackPressedDispatcher().onBackPressed();
+                    }
+                }
+        );
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
@@ -115,9 +132,7 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            settings.setSafeBrowsingEnabled(true);
-        }
+        settings.setSafeBrowsingEnabled(true);
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
@@ -125,7 +140,8 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(false);
         settings.setTextZoom(100);
         settings.setUserAgentString(
-                settings.getUserAgentString() + " CombusplusAndroid/9.4.2"
+                settings.getUserAgentString() +
+                        " CombusplusAndroid/" + BuildConfig.VERSION_NAME
         );
 
         webView.addJavascriptInterface(webBridge, "AndroidBridge");
@@ -224,6 +240,28 @@ public class MainActivity extends Activity {
         }
     }
 
+    public void renderEmbeddedMapV2(
+            String stationsJson,
+            double left,
+            double top,
+            double width,
+            double height,
+            double viewportWidth,
+            double navigationTop
+    ) {
+        if (embeddedMap != null) {
+            embeddedMap.renderV2(
+                    stationsJson,
+                    left,
+                    top,
+                    width,
+                    height,
+                    viewportWidth,
+                    navigationTop
+            );
+        }
+    }
+
     public void hideEmbeddedMap() {
         if (embeddedMap != null) embeddedMap.hide();
     }
@@ -240,6 +278,15 @@ public class MainActivity extends Activity {
 
     private boolean openExternalWhenNeeded(Uri uri) {
         if (isTrusted(uri)) return false;
+
+        String scheme = uri == null ? "" : String.valueOf(uri.getScheme());
+        if (
+            !"https".equalsIgnoreCase(scheme) &&
+            !"geo".equalsIgnoreCase(scheme) &&
+            !"market".equalsIgnoreCase(scheme)
+        ) {
+            return true;
+        }
 
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
@@ -342,12 +389,4 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    @Override
-    public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
-    }
 }

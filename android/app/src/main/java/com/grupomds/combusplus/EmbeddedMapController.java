@@ -31,13 +31,10 @@ import java.util.Locale;
 import java.util.Map;
 
 final class EmbeddedMapController {
-    private static final int NAV_RESERVED_DP = 78;
-    private static final int BORDER_DP = 3;
-
     private final MainActivity activity;
     private final FrameLayout root;
     private final WebView webView;
-    private final FrameLayout container;
+    private final FrameLayout clipContainer;
     private final MapView mapView;
     private final TextView loading;
     private final Map<Marker, String> markerIds = new HashMap<>();
@@ -47,14 +44,14 @@ final class EmbeddedMapController {
     private JSONArray pendingStations = new JSONArray();
     private boolean started;
     private int lastPayloadHash;
-    private int lastLeft = Integer.MIN_VALUE;
-    private int lastTop = Integer.MIN_VALUE;
-    private int lastWidth = -1;
-    private int lastHeight = -1;
-    private int lastInnerLeft = Integer.MIN_VALUE;
-    private int lastInnerTop = Integer.MIN_VALUE;
-    private int lastInnerWidth = -1;
-    private int lastInnerHeight = -1;
+    private int lastClipLeft = Integer.MIN_VALUE;
+    private int lastClipTop = Integer.MIN_VALUE;
+    private int lastClipWidth = -1;
+    private int lastClipHeight = -1;
+    private int lastMapLeft = Integer.MIN_VALUE;
+    private int lastMapTop = Integer.MIN_VALUE;
+    private int lastMapWidth = -1;
+    private int lastMapHeight = -1;
 
     EmbeddedMapController(
             MainActivity activity,
@@ -65,14 +62,14 @@ final class EmbeddedMapController {
         this.root = root;
         this.webView = webView;
 
-        container = new FrameLayout(activity);
-        container.setBackgroundColor(0xFFD1131B);
-        container.setVisibility(View.GONE);
-        container.setElevation(0f);
-        container.setClipChildren(true);
-        container.setClipToPadding(true);
-        container.setClipToOutline(true);
-        container.setOutlineProvider(new ViewOutlineProvider() {
+        clipContainer = new FrameLayout(activity);
+        clipContainer.setBackgroundColor(Color.TRANSPARENT);
+        clipContainer.setVisibility(View.GONE);
+        clipContainer.setElevation(0f);
+        clipContainer.setClipChildren(true);
+        clipContainer.setClipToPadding(true);
+        clipContainer.setClipToOutline(true);
+        clipContainer.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
                 outline.setRoundRect(
@@ -80,7 +77,7 @@ final class EmbeddedMapController {
                         0,
                         view.getWidth(),
                         view.getHeight(),
-                        dp(16)
+                        dp(13)
                 );
             }
         });
@@ -101,20 +98,14 @@ final class EmbeddedMapController {
 
         mapView = new MapView(activity, options);
         mapView.onCreate((Bundle) null);
-        container.addView(
-                mapView,
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                )
-        );
+        clipContainer.addView(mapView);
 
         loading = new TextView(activity);
         loading.setText("Cargando gasolineras…");
         loading.setTextColor(Color.WHITE);
         loading.setBackgroundColor(0xCC111318);
         loading.setPadding(dp(14), dp(9), dp(14), dp(9));
-        container.addView(
+        clipContainer.addView(
                 loading,
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
@@ -122,7 +113,7 @@ final class EmbeddedMapController {
                 )
         );
 
-        root.addView(container);
+        root.addView(clipContainer);
 
         mapView.getMapAsync(googleMap -> {
             map = googleMap;
@@ -153,16 +144,43 @@ final class EmbeddedMapController {
             double widthCss,
             double heightCss
     ) {
+        double density = activity.getResources()
+                .getDisplayMetrics()
+                .density;
+        double viewportWidthCss = webView.getWidth() / Math.max(1d, density);
+        double navTopCss = webView.getHeight() / Math.max(1d, density);
+        renderV2(
+                stationsJson,
+                leftCss,
+                topCss,
+                widthCss,
+                heightCss,
+                viewportWidthCss,
+                navTopCss
+        );
+    }
+
+    void renderV2(
+            String stationsJson,
+            double leftCss,
+            double topCss,
+            double widthCss,
+            double heightCss,
+            double viewportWidthCss,
+            double navTopCss
+    ) {
         try {
             JSONObject payload = new JSONObject(stationsJson);
             JSONArray items = payload.optJSONArray("items");
             pendingStations = items == null ? new JSONArray() : items;
 
-            if (!positionExactly(
+            if (!positionInsideViewport(
                     leftCss,
                     topCss,
                     widthCss,
-                    heightCss
+                    heightCss,
+                    viewportWidthCss,
+                    navTopCss
             )) {
                 hide();
                 return;
@@ -174,8 +192,8 @@ final class EmbeddedMapController {
             }
 
             mapView.onResume();
-            container.setVisibility(View.VISIBLE);
-            container.bringToFront();
+            clipContainer.setVisibility(View.VISIBLE);
+            clipContainer.bringToFront();
 
             int hash = stationsJson.hashCode();
             boolean changed = hash != lastPayloadHash;
@@ -184,117 +202,101 @@ final class EmbeddedMapController {
         } catch (Exception error) {
             loading.setText("No se pudo preparar el mapa.");
             loading.setVisibility(View.VISIBLE);
-            container.setVisibility(View.VISIBLE);
+            clipContainer.setVisibility(View.VISIBLE);
         }
     }
 
-    private boolean positionExactly(
+    private boolean positionInsideViewport(
             double leftCss,
             double topCss,
             double widthCss,
-            double heightCss
+            double heightCss,
+            double viewportWidthCss,
+            double navTopCss
     ) {
-        /*
-         * El mapa nativo se dibuja sobre el WebView. Se recorta físicamente
-         * antes del menú inferior y se mantiene alineado con el rectángulo
-         * real del mapa HTML durante el scroll.
-         */
-        float scale = webView.getScale();
-        if (!Float.isFinite(scale) || scale <= 0f) {
-            scale = activity.getResources()
-                    .getDisplayMetrics()
-                    .density;
-        }
-
-        int fullLeft =
-                webView.getLeft() +
-                Math.round((float) leftCss * scale);
-        int fullTop =
-                webView.getTop() +
-                Math.round((float) topCss * scale);
-        int fullWidth = Math.max(
-                dp(180),
-                Math.round((float) widthCss * scale)
-        );
-        int fullHeight = Math.max(
-                dp(220),
-                Math.round((float) heightCss * scale)
-        );
-
-        int viewportLeft = webView.getLeft();
-        int viewportTop = webView.getTop();
-        int viewportRight =
-                webView.getLeft() + webView.getWidth();
-        int viewportBottom =
-                webView.getTop() +
-                webView.getHeight() -
-                dp(NAV_RESERVED_DP);
-
-        int fullRight = fullLeft + fullWidth;
-        int fullBottom = fullTop + fullHeight;
-
-        int clippedLeft = Math.max(fullLeft, viewportLeft);
-        int clippedTop = Math.max(fullTop, viewportTop);
-        int clippedRight = Math.min(fullRight, viewportRight);
-        int clippedBottom = Math.min(fullBottom, viewportBottom);
-
-        if (
-                clippedRight <= clippedLeft ||
-                clippedBottom <= clippedTop
-        ) {
+        if (!Double.isFinite(viewportWidthCss) || viewportWidthCss <= 0d) {
             return false;
         }
 
-        int visibleWidth = clippedRight - clippedLeft;
-        int visibleHeight = clippedBottom - clippedTop;
+        /*
+         * La escala se obtiene comparando el ancho real del WebView con el
+         * ancho CSS comunicado por JavaScript. Así no depende del zoom,
+         * densidad ni modelo del móvil.
+         */
+        double scale = webView.getWidth() / viewportWidthCss;
+        if (!Double.isFinite(scale) || scale <= 0d) return false;
 
-        if (
-                clippedLeft != lastLeft ||
-                clippedTop != lastTop ||
-                visibleWidth != lastWidth ||
-                visibleHeight != lastHeight
-        ) {
-            FrameLayout.LayoutParams outerLayout =
-                    new FrameLayout.LayoutParams(
-                            visibleWidth,
-                            visibleHeight
-                    );
-            outerLayout.leftMargin = clippedLeft;
-            outerLayout.topMargin = clippedTop;
-            container.setLayoutParams(outerLayout);
+        int mapLeft = webView.getLeft() + px(leftCss, scale);
+        int mapTop = webView.getTop() + px(topCss, scale);
+        int mapWidth = Math.max(dp(180), px(widthCss, scale));
+        int mapHeight = Math.max(dp(220), px(heightCss, scale));
 
-            lastLeft = clippedLeft;
-            lastTop = clippedTop;
-            lastWidth = visibleWidth;
-            lastHeight = visibleHeight;
-            container.invalidateOutline();
+        int viewportLeft = webView.getLeft();
+        int viewportTop = webView.getTop();
+        int viewportRight = viewportLeft + webView.getWidth();
+        int webViewBottom = viewportTop + webView.getHeight();
+
+        int navigationTop = webViewBottom;
+        if (Double.isFinite(navTopCss) && navTopCss > 0d) {
+            navigationTop = Math.min(
+                    webViewBottom,
+                    webView.getTop() + px(navTopCss, scale)
+            );
         }
 
-        int border = dp(BORDER_DP);
-        int innerLeft = fullLeft - clippedLeft + border;
-        int innerTop = fullTop - clippedTop + border;
-        int innerWidth = Math.max(1, fullWidth - border * 2);
-        int innerHeight = Math.max(1, fullHeight - border * 2);
+        int mapRight = mapLeft + mapWidth;
+        int mapBottom = mapTop + mapHeight;
+
+        int clipLeft = Math.max(mapLeft, viewportLeft);
+        int clipTop = Math.max(mapTop, viewportTop);
+        int clipRight = Math.min(mapRight, viewportRight);
+        int clipBottom = Math.min(mapBottom, navigationTop - dp(1));
+
+        if (clipRight <= clipLeft || clipBottom <= clipTop) {
+            return false;
+        }
+
+        int clipWidth = clipRight - clipLeft;
+        int clipHeight = clipBottom - clipTop;
 
         if (
-                innerLeft != lastInnerLeft ||
-                innerTop != lastInnerTop ||
-                innerWidth != lastInnerWidth ||
-                innerHeight != lastInnerHeight
+                clipLeft != lastClipLeft ||
+                clipTop != lastClipTop ||
+                clipWidth != lastClipWidth ||
+                clipHeight != lastClipHeight
         ) {
-            FrameLayout.LayoutParams innerLayout =
-                    new FrameLayout.LayoutParams(
-                            innerWidth,
-                            innerHeight
-                    );
-            innerLayout.leftMargin = innerLeft;
-            innerLayout.topMargin = innerTop;
-            mapView.setLayoutParams(innerLayout);
+            FrameLayout.LayoutParams clipLayout =
+                    new FrameLayout.LayoutParams(clipWidth, clipHeight);
+            clipLayout.leftMargin = clipLeft;
+            clipLayout.topMargin = clipTop;
+            clipContainer.setLayoutParams(clipLayout);
 
-            lastInnerLeft = innerLeft;
-            lastInnerTop = innerTop;
-            lastInnerWidth = innerWidth;
-            lastInnerHeight = innerHeight;
+            lastClipLeft = clipLeft;
+            lastClipTop = clipTop;
+            lastClipWidth = clipWidth;
+            lastClipHeight = clipHeight;
+            clipContainer.invalidateOutline();
+        }
+
+        int innerLeft = mapLeft - clipLeft;
+        int innerTop = mapTop - clipTop;
+
+        if (
+                innerLeft != lastMapLeft ||
+                innerTop != lastMapTop ||
+                mapWidth != lastMapWidth ||
+                mapHeight != lastMapHeight
+        ) {
+            FrameLayout.LayoutParams mapLayout =
+                    new FrameLayout.LayoutParams(mapWidth, mapHeight);
+            mapLayout.leftMargin = innerLeft;
+            mapLayout.topMargin = innerTop;
+            mapView.setLayoutParams(mapLayout);
+
+            lastMapLeft = innerLeft;
+            lastMapTop = innerTop;
+            lastMapWidth = mapWidth;
+            lastMapHeight = mapHeight;
         }
 
         return true;
@@ -310,72 +312,38 @@ final class EmbeddedMapController {
         boolean hasBounds = false;
         int added = 0;
 
-        for (
-                int index = 0;
-                index < pendingStations.length();
-                index++
-        ) {
+        for (int index = 0; index < pendingStations.length(); index++) {
             JSONObject item = pendingStations.optJSONObject(index);
             if (item == null) continue;
 
-            double latitude =
-                    item.optDouble("latitude", Double.NaN);
-            double longitude =
-                    item.optDouble("longitude", Double.NaN);
-
-            if (
-                    !Double.isFinite(latitude) ||
-                    !Double.isFinite(longitude)
-            ) {
+            double latitude = item.optDouble("latitude", Double.NaN);
+            double longitude = item.optDouble("longitude", Double.NaN);
+            if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) {
                 continue;
             }
 
             String id = item.optString("id", "");
-            String name =
-                    item.optString("name", "Gasolinera");
-            String price = normalizePriceLabel(
-                    item.optString("price", "")
-            );
+            String name = item.optString("name", "Gasolinera");
+            String price = normalizePriceLabel(item.optString("price", ""));
             String status = item.optString("status", "");
             String address = item.optString("address", "");
-            boolean favorite =
-                    item.optBoolean("favorite", false);
+            boolean favorite = item.optBoolean("favorite", false);
 
             Marker marker = map.addMarker(
                     new MarkerOptions()
-                            .position(
-                                    new LatLng(
-                                            latitude,
-                                            longitude
-                                    )
-                            )
+                            .position(new LatLng(latitude, longitude))
                             .title(name)
-                            .snippet(
-                                    join(
-                                            price,
-                                            status,
-                                            address
-                                    )
-                            )
+                            .snippet(join(price, status, address))
                             .anchor(0.5f, 0.5f)
-                            .icon(
-                                    priceMarker(
-                                            price,
-                                            favorite
-                                    )
-                            )
-                            .zIndex(
-                                    favorite ? 10f : 1f
-                            )
+                            .icon(priceMarker(price, favorite))
+                            .zIndex(favorite ? 10f : 1f)
             );
 
             if (marker != null && !id.isEmpty()) {
                 markerIds.put(marker, id);
             }
 
-            bounds.include(
-                    new LatLng(latitude, longitude)
-            );
+            bounds.include(new LatLng(latitude, longitude));
             hasBounds = true;
             added++;
         }
@@ -385,19 +353,16 @@ final class EmbeddedMapController {
                         ? "No hay gasolineras en esta zona."
                         : added + " gasolineras"
         );
-        loading.setVisibility(
-                added == 0 ? View.VISIBLE : View.GONE
-        );
+        loading.setVisibility(added == 0 ? View.VISIBLE : View.GONE);
 
         if (hasBounds) {
-            container.post(() -> {
+            clipContainer.post(() -> {
                 try {
                     map.moveCamera(
-                            CameraUpdateFactory
-                                    .newLatLngBounds(
-                                            bounds.build(),
-                                            dp(38)
-                                    )
+                            CameraUpdateFactory.newLatLngBounds(
+                                    bounds.build(),
+                                    dp(38)
+                            )
                     );
                 } catch (Exception ignored) {
                 }
@@ -405,14 +370,9 @@ final class EmbeddedMapController {
         }
     }
 
-    private BitmapDescriptor priceMarker(
-            String price,
-            boolean favorite
-    ) {
+    private BitmapDescriptor priceMarker(String price, boolean favorite) {
         String label = price.isEmpty() ? "—" : price;
-        String key =
-                (favorite ? "fav|" : "normal|") + label;
-
+        String key = (favorite ? "fav|" : "normal|") + label;
         BitmapDescriptor cached = markerCache.get(key);
         if (cached != null) return cached;
 
@@ -434,9 +394,7 @@ final class EmbeddedMapController {
         );
 
         Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-        fill.setColor(
-                favorite ? 0xFFFFC107 : 0xFFD71920
-        );
+        fill.setColor(favorite ? 0xFFFFC107 : 0xFFD71920);
         canvas.drawCircle(
                 size / 2f,
                 size / 2f,
@@ -456,27 +414,16 @@ final class EmbeddedMapController {
         );
 
         Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-        text.setColor(
-                favorite ? 0xFF16181C : Color.WHITE
-        );
+        text.setColor(favorite ? 0xFF16181C : Color.WHITE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setFakeBoldText(true);
-        text.setTextSize(
-                dp(label.length() > 7 ? 10 : 11)
-        );
+        text.setTextSize(dp(label.length() > 7 ? 10 : 11));
 
-        Paint.FontMetrics metrics =
-                text.getFontMetrics();
+        Paint.FontMetrics metrics = text.getFontMetrics();
         float baseline =
                 size / 2f -
                 (metrics.ascent + metrics.descent) / 2f;
-
-        canvas.drawText(
-                label,
-                size / 2f,
-                baseline,
-                text
-        );
+        canvas.drawText(label, size / 2f, baseline, text);
 
         BitmapDescriptor descriptor =
                 BitmapDescriptorFactory.fromBitmap(bitmap);
@@ -490,38 +437,31 @@ final class EmbeddedMapController {
                 .replace("€", "")
                 .trim();
 
-        if (
-                text.isEmpty() ||
-                "Sin precio".equalsIgnoreCase(text)
-        ) {
+        if (text.isEmpty() || "Sin precio".equalsIgnoreCase(text)) {
             return "—";
         }
 
         try {
-            double number = Double.parseDouble(
-                    text.replace(",", ".")
-            );
+            double number = Double.parseDouble(text.replace(",", "."));
             return String.format(
                     Locale.forLanguageTag("es-ES"),
                     "%.3f€",
                     number
             );
         } catch (Exception ignored) {
-            return text.length() > 8
-                    ? text.substring(0, 8)
-                    : text;
+            return text.length() > 8 ? text.substring(0, 8) : text;
         }
     }
 
     void hide() {
-        if (container.getVisibility() == View.VISIBLE) {
+        if (clipContainer.getVisibility() == View.VISIBLE) {
             mapView.onPause();
-            container.setVisibility(View.GONE);
+            clipContainer.setVisibility(View.GONE);
         }
     }
 
     void onResume() {
-        if (container.getVisibility() == View.VISIBLE) {
+        if (clipContainer.getVisibility() == View.VISIBLE) {
             if (!started) {
                 mapView.onStart();
                 started = true;
@@ -531,7 +471,7 @@ final class EmbeddedMapController {
     }
 
     void onPause() {
-        if (container.getVisibility() == View.VISIBLE) {
+        if (clipContainer.getVisibility() == View.VISIBLE) {
             mapView.onPause();
         }
     }
@@ -545,28 +485,21 @@ final class EmbeddedMapController {
         markerCache.clear();
     }
 
+    private int px(double cssPixels, double scale) {
+        return (int) Math.round(cssPixels * scale);
+    }
+
     private int dp(int value) {
         return Math.round(
-                value *
-                activity.getResources()
-                        .getDisplayMetrics()
-                        .density
+                value * activity.getResources().getDisplayMetrics().density
         );
     }
 
     private static String join(String... values) {
         StringBuilder result = new StringBuilder();
         for (String value : values) {
-            if (
-                    value == null ||
-                    value.trim().isEmpty()
-            ) {
-                continue;
-            }
-
-            if (result.length() > 0) {
-                result.append(" · ");
-            }
+            if (value == null || value.trim().isEmpty()) continue;
+            if (result.length() > 0) result.append(" · ");
             result.append(value.trim());
         }
         return result.toString();

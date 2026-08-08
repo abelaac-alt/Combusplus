@@ -175,7 +175,10 @@ public final class NativeSessionManager {
         connection.setDoOutput(true);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("User-Agent", "CombusplusAndroid/9.0");
+        connection.setRequestProperty(
+                "User-Agent",
+                "CombusplusAndroid/" + BuildConfig.VERSION_NAME
+        );
         if (!publishableKey.isEmpty()) {
             connection.setRequestProperty("apikey", publishableKey);
             connection.setRequestProperty("Authorization", "Bearer " + publishableKey);
