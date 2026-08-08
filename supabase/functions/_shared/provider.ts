@@ -12,6 +12,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function finite(value: unknown): number | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export async function fetchProviderStations(
   latitude: number,
   longitude: number,
@@ -38,7 +44,7 @@ export async function fetchProviderStations(
       headers: {
         'X-API-Key': apiKey,
         Accept: 'application/json',
-        'User-Agent': 'CombusplusSupabase/7.0',
+        'User-Agent': 'CombusplusSupabase/10.6.3',
       },
     });
     const payload = await upstream.json().catch(() => null);
@@ -69,10 +75,10 @@ export function parseSyncPoints(raw: string): SearchPoint[] {
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
       const point = item as Record<string, unknown>;
-      const latitude = Number(point.latitude);
-      const longitude = Number(point.longitude);
-      const radius = Number(point.radius || 30);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      const latitude = finite(point.latitude);
+      const longitude = finite(point.longitude);
+      const radius = finite(point.radius) ?? 30;
+      if (latitude == null || longitude == null) return null;
       if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
       return { latitude, longitude, radius: clamp(radius, 1, 50) };
     })

@@ -230,3 +230,1020 @@ html,body,.app-shell,main,.page{overscroll-behavior-x:none;touch-action:pan-y}
 .analytics-consent{display:flex;align-items:flex-start;gap:12px;margin:20px 0;padding:14px;border:1px solid #dde0e5;border-radius:14px;background:#f8f9fb}
 .analytics-consent input{width:20px;height:20px;margin-top:2px}
 @keyframes onboardingIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+
+.map-search-card{background:#fff;border:1px solid #d8dbe0;padding:14px;margin:0 0 12px}
+.map-search-card label{display:block;font-size:.82rem;font-weight:800;margin-bottom:8px}
+.map-search-row{display:flex;gap:8px}
+.map-search-row input{min-width:0;flex:1;padding:12px;border:1px solid #cdd1d8;border-radius:8px;font:inherit}
+.native-shell #googleMap{background:#eef0f3}
+
+
+.native-shell #googleMap{
+  position:relative;
+  min-height:420px;
+  overflow:hidden;
+  border:1px solid #d8dbe0;
+  border-radius:10px;
+  background:#eef0f3;
+  contain:layout paint;
+}
+
+
+.page[data-page="map"]{
+  padding-bottom:calc(82px + env(safe-area-inset-bottom));
+}
+.page[data-page="map"] .map-toolbar{
+  min-height:54px;
+}
+.native-shell #googleMap{
+  position:relative;
+  width:100%;
+  height:clamp(360px,52vh,520px);
+  min-height:360px;
+  max-height:520px;
+  overflow:hidden;
+  border:1px solid #d8dbe0;
+  border-radius:12px;
+  background:#eef0f3;
+  contain:layout paint;
+  touch-action:none;
+}
+.native-shell #mapPreviewList{
+  display:none!important;
+}
+
+
+/* Combusplus 9.6.5: marco único y filtro de abiertas */
+.page[data-page="map"] #googleMap,
+#page-map #googleMap{
+  position:relative !important;
+  width:100% !important;
+  aspect-ratio:1 / 1 !important;
+  min-height:320px !important;
+  height:auto !important;
+  max-height:none !important;
+  overflow:hidden !important;
+  border:3px solid #d1131b !important;
+  border-radius:18px !important;
+  background:#eef0f3 !important;
+  box-sizing:border-box !important;
+  contain:layout paint !important;
+  isolation:isolate !important;
+}
+.page[data-page="map"] .map-card,
+.page[data-page="map"] .map-frame,
+.page[data-page="map"] .map-panel,
+#page-map .map-card,
+#page-map .map-frame,
+#page-map .map-panel{
+  border:0 !important;
+  outline:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+}
+.map-filter-card{
+  margin:0 0 12px;
+  padding:14px 16px;
+  border:1px solid #d8dbe0;
+  background:#fff;
+}
+.map-open-filter{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  font-weight:750;
+  cursor:pointer;
+}
+.map-open-filter input{
+  width:22px;
+  height:22px;
+  accent-color:#d1131b;
+}
+
+
+/* Combusplus 9.6.8: el recuadro DOM define exactamente el tamaño nativo */
+.page[data-page="map"] #googleMap{
+  position:relative !important;
+  width:100% !important;
+  aspect-ratio:1 / 1 !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  padding:0 !important;
+  margin:0 !important;
+  border:0 !important;
+  border-radius:18px !important;
+  overflow:hidden !important;
+  background:transparent !important;
+  box-sizing:border-box !important;
+  contain:layout paint !important;
+  isolation:isolate !important;
+}
+.page[data-page="map"] .map-card,
+.page[data-page="map"] .map-frame,
+.page[data-page="map"] .map-panel{
+  border:0 !important;
+  padding:0 !important;
+  overflow:visible !important;
+  background:transparent !important;
+}
+.app-brand img,
+.brand img,
+.topbar img,
+header img[alt="Combusplus"],
+img[data-brand="combusplus"]{
+  width:52px !important;
+  height:52px !important;
+  object-fit:contain !important;
+  background:transparent !important;
+  border-radius:0 !important;
+}
+
+
+/* Combusplus 9.7: navegación inferior fija, mapa sin hueco y widgets renovados */
+:root{
+  --bottom-nav-height:74px;
+}
+.app-shell{
+  min-height:100dvh !important;
+  padding-bottom:calc(var(--bottom-nav-height) + var(--safe-bottom) + 18px) !important;
+}
+main{
+  padding-bottom:calc(var(--bottom-nav-height) + var(--safe-bottom) + 24px) !important;
+}
+.bottom-nav{
+  position:fixed !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:0 !important;
+  transform:translateX(-50%) !important;
+  width:min(100%,1180px) !important;
+  min-height:var(--bottom-nav-height) !important;
+  padding-bottom:var(--safe-bottom) !important;
+  z-index:10000 !important;
+  background:rgba(255,255,255,.98) !important;
+  border-top:1px solid #d9dde3 !important;
+  box-shadow:0 -8px 24px rgba(15,20,30,.12) !important;
+  backdrop-filter:blur(14px);
+}
+.bottom-nav .nav-item{
+  min-height:var(--bottom-nav-height) !important;
+  background:transparent !important;
+}
+.bottom-nav .nav-item.is-active{
+  background:#fff0f1 !important;
+  color:var(--red) !important;
+}
+.page[data-page="map"]{
+  padding-bottom:calc(var(--bottom-nav-height) + var(--safe-bottom) + 16px) !important;
+}
+.page[data-page="map"] #googleMap{
+  margin-top:0 !important;
+}
+.page[data-page="map"] .map-toolbar,
+.page[data-page="map"] .map-search-card,
+.page[data-page="map"] .map-open-filter-card{
+  margin-bottom:10px !important;
+}
+.page[data-page="map"] .map-toolbar + #googleMap,
+.page[data-page="map"] .map-open-filter-card + .map-toolbar,
+.page[data-page="map"] .map-toolbar + .map-frame,
+.page[data-page="map"] .map-toolbar + .map-card{
+  margin-top:0 !important;
+}
+.page[data-page="map"] .map-frame,
+.page[data-page="map"] .map-card,
+.page[data-page="map"] .map-panel{
+  margin-top:0 !important;
+}
+.home-widget-grid{
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr)) !important;
+  gap:16px !important;
+}
+.home-widget{
+  border:0 !important;
+  border-radius:18px !important;
+  overflow:hidden !important;
+  box-shadow:0 14px 36px rgba(13,20,33,.11) !important;
+}
+.home-widget-head{
+  padding:17px 18px 14px !important;
+  background:linear-gradient(135deg,#fff 0%,#fafbfc 100%) !important;
+}
+.icon-text-btn{
+  min-width:94px !important;
+  height:38px !important;
+  border-radius:999px !important;
+  border-color:#e4b5b8 !important;
+  background:#fff4f5 !important;
+  font-size:12px !important;
+}
+.favorite-widget-row{
+  min-height:62px !important;
+  padding:12px 18px !important;
+}
+.favorite-widget-price strong{
+  font-size:17px !important;
+  color:var(--red) !important;
+}
+.full-tank-widget{
+  border-radius:18px !important;
+  border-left:0 !important;
+  padding:20px !important;
+  background:linear-gradient(145deg,#111318 0%,#1b2030 58%,#6e1117 100%) !important;
+}
+.full-tank-action{
+  border-radius:12px !important;
+}
+
+
+/* Combusplus 9.8: mapa estático y navegación inferior permanente */
+:root{
+  --cp-bottom-nav-height:76px;
+  --cp-map-gap:10px;
+}
+body.cp-map-screen{
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+}
+.bottom-nav{
+  position:fixed !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:0 !important;
+  transform:translateX(-50%) !important;
+  width:min(100%,1180px) !important;
+  height:calc(var(--cp-bottom-nav-height) + var(--safe-bottom)) !important;
+  min-height:var(--cp-bottom-nav-height) !important;
+  padding-bottom:var(--safe-bottom) !important;
+  z-index:2147483000 !important;
+  background:#fff !important;
+  border-top:1px solid #d8dce2 !important;
+  box-shadow:0 -7px 24px rgba(12,18,28,.14) !important;
+  visibility:visible !important;
+  opacity:1 !important;
+}
+.bottom-nav[hidden]{
+  display:grid !important;
+}
+main{
+  padding-bottom:calc(var(--cp-bottom-nav-height) + var(--safe-bottom)) !important;
+}
+.page[data-page="map"]{
+  position:fixed !important;
+  inset:
+    var(--safe-top)
+    0
+    calc(var(--cp-bottom-nav-height) + var(--safe-bottom))
+    0 !important;
+  display:none;
+  grid-template-rows:auto auto auto minmax(0,1fr) !important;
+  gap:var(--cp-map-gap) !important;
+  overflow:hidden !important;
+  padding:18px clamp(14px,3vw,24px) 10px !important;
+  background:#f4f5f7 !important;
+}
+.page[data-page="map"].is-active{
+  display:grid !important;
+}
+.page[data-page="map"] .page-head,
+.page[data-page="map"] .map-search-card,
+.page[data-page="map"] .map-open-filter-card,
+.page[data-page="map"] .map-toolbar{
+  margin:0 !important;
+  flex:none !important;
+}
+.page[data-page="map"] #googleMap{
+  position:relative !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  max-height:none !important;
+  margin:0 !important;
+  overflow:hidden !important;
+  border:3px solid #d1131b !important;
+  border-radius:16px !important;
+  box-sizing:border-box !important;
+  background:#eef0f3 !important;
+  contain:layout paint !important;
+  isolation:isolate !important;
+}
+.page[data-page="map"] #mapPreviewList{
+  display:none !important;
+}
+
+
+/* Combusplus 9.9: composición exacta de mapa y menú */
+:root{
+  --cp-live-header:0px;
+  --cp-live-nav:76px;
+  --cp-map-padding-x:18px;
+}
+
+.bottom-nav{
+  position:fixed !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:0 !important;
+  transform:translateX(-50%) !important;
+  width:min(100%,1180px) !important;
+  height:var(--cp-live-nav) !important;
+  min-height:var(--cp-live-nav) !important;
+  z-index:2147483000 !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  display:grid !important;
+  background:#fff !important;
+}
+
+body.cp-map-screen{
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+}
+
+body.cp-map-screen main{
+  padding:0 !important;
+  margin:0 !important;
+}
+
+.page[data-page="map"]{
+  position:fixed !important;
+  top:var(--cp-live-header) !important;
+  right:0 !important;
+  bottom:var(--cp-live-nav) !important;
+  left:0 !important;
+  display:none !important;
+  grid-template-rows:auto auto auto auto minmax(220px,1fr) !important;
+  gap:8px !important;
+  overflow:hidden !important;
+  padding:12px var(--cp-map-padding-x) 10px !important;
+  margin:0 !important;
+  background:#f4f5f7 !important;
+  box-sizing:border-box !important;
+}
+
+.page[data-page="map"].is-active{
+  display:grid !important;
+}
+
+.page[data-page="map"] > *{
+  min-width:0 !important;
+}
+
+.page[data-page="map"] .page-head{
+  margin:0 !important;
+  min-height:46px !important;
+}
+
+.page[data-page="map"] .page-head h1{
+  margin:1px 0 0 !important;
+  font-size:30px !important;
+  line-height:1 !important;
+}
+
+.page[data-page="map"] .map-search-card,
+.page[data-page="map"] .map-open-filter-card,
+.page[data-page="map"] .map-toolbar{
+  margin:0 !important;
+  border-radius:10px !important;
+  box-sizing:border-box !important;
+}
+
+.page[data-page="map"] .map-search-card{
+  padding:12px 14px !important;
+}
+
+.page[data-page="map"] .map-search-card label,
+.page[data-page="map"] .map-search-card strong{
+  margin:0 0 6px !important;
+}
+
+.page[data-page="map"] .map-search-card input,
+.page[data-page="map"] .map-search-card button{
+  min-height:48px !important;
+}
+
+.page[data-page="map"] .map-open-filter-card{
+  min-height:58px !important;
+  padding:10px 14px !important;
+}
+
+.page[data-page="map"] .map-toolbar{
+  min-height:50px !important;
+  padding:10px 14px !important;
+}
+
+.page[data-page="map"] #googleMap{
+  position:relative !important;
+  align-self:stretch !important;
+  justify-self:stretch !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:220px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:3px solid #d1131b !important;
+  border-radius:16px !important;
+  box-sizing:border-box !important;
+  background:#eef0f3 !important;
+  contain:layout paint !important;
+  isolation:isolate !important;
+}
+
+.page[data-page="map"] #mapPreviewList{
+  display:none !important;
+}
+
+@media (max-height:760px){
+  .page[data-page="map"]{
+    gap:6px !important;
+    padding-top:8px !important;
+  }
+  .page[data-page="map"] .page-head{
+    min-height:38px !important;
+  }
+  .page[data-page="map"] .page-head .eyebrow{
+    display:none !important;
+  }
+  .page[data-page="map"] .page-head h1{
+    font-size:27px !important;
+  }
+  .page[data-page="map"] .map-search-card{
+    padding:8px 10px !important;
+  }
+  .page[data-page="map"] .map-search-card input,
+  .page[data-page="map"] .map-search-card button{
+    min-height:42px !important;
+  }
+  .page[data-page="map"] .map-open-filter-card,
+  .page[data-page="map"] .map-toolbar{
+    min-height:46px !important;
+    padding:7px 10px !important;
+  }
+}
+
+
+/* Combusplus 10.1: mapa alineado con el marco y separado del menú */
+:root{
+  --cp-v101-nav:76px;
+}
+
+body.cp-map-screen{
+  overflow-y:auto !important;
+  overscroll-behavior-y:contain !important;
+}
+
+body.cp-map-screen main{
+  padding-bottom:calc(
+    var(--cp-v101-nav) + var(--safe-bottom) + 22px
+  ) !important;
+  overflow:visible !important;
+}
+
+.bottom-nav{
+  position:fixed !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:0 !important;
+  transform:translateX(-50%) !important;
+  width:min(100%,1180px) !important;
+  height:calc(var(--cp-v101-nav) + var(--safe-bottom)) !important;
+  min-height:var(--cp-v101-nav) !important;
+  padding-bottom:var(--safe-bottom) !important;
+  z-index:2147483000 !important;
+  display:grid !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  background:#fff !important;
+  border-top:1px solid #d8dce2 !important;
+  box-shadow:0 -7px 24px rgba(12,18,28,.15) !important;
+}
+
+.page[data-page="map"]{
+  position:relative !important;
+  inset:auto !important;
+  display:none !important;
+  width:100% !important;
+  height:auto !important;
+  min-height:auto !important;
+  overflow:visible !important;
+  padding:0 !important;
+  margin:0 !important;
+  background:#f4f5f7 !important;
+}
+
+.page[data-page="map"].is-active{
+  display:block !important;
+}
+
+.page[data-page="map"] #googleMap{
+  position:relative !important;
+  display:block !important;
+  width:100% !important;
+  max-width:900px !important;
+  height:clamp(390px,56dvh,540px) !important;
+  min-height:390px !important;
+  max-height:540px !important;
+  margin:0 auto calc(
+    var(--cp-v101-nav) + var(--safe-bottom) + 22px
+  ) !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:3px solid #d1131b !important;
+  border-radius:16px !important;
+  box-sizing:border-box !important;
+  background:#eef0f3 !important;
+  contain:layout paint !important;
+  isolation:isolate !important;
+  box-shadow:0 8px 22px rgba(20,24,32,.11) !important;
+}
+
+.page[data-page="map"] #mapPreviewList{
+  display:none !important;
+}
+
+@media(max-height:740px){
+  .page[data-page="map"] #googleMap{
+    height:390px !important;
+    min-height:390px !important;
+  }
+}
+
+/* Combusplus 10.2: mapa integrado dentro de la interfaz */
+:root{
+  --cp-v102-nav-height:72px;
+  --cp-v102-side:14px;
+}
+
+html,
+body{
+  overflow-x:hidden !important;
+}
+
+body{
+  overflow-y:auto !important;
+}
+
+.app-shell{
+  padding-bottom:
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 18px)
+    !important;
+}
+
+main{
+  padding:
+    14px
+    max(var(--cp-v102-side),var(--safe-right))
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 24px)
+    max(var(--cp-v102-side),var(--safe-left))
+    !important;
+  overflow:visible !important;
+}
+
+.page[data-page="map"]{
+  position:relative !important;
+  inset:auto !important;
+  display:none !important;
+  width:100% !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  padding:0 !important;
+  margin:0 !important;
+  overflow:visible !important;
+  background:transparent !important;
+}
+
+.page[data-page="map"].is-active{
+  display:block !important;
+}
+
+.page[data-page="map"] .page-head{
+  margin:0 0 14px !important;
+}
+
+.page[data-page="map"] .map-search-card,
+.page[data-page="map"] .map-open-filter-card,
+.page[data-page="map"] .map-toolbar{
+  width:100% !important;
+  margin:0 0 12px !important;
+  border-radius:12px !important;
+}
+
+.page[data-page="map"] #googleMap{
+  position:relative !important;
+  inset:auto !important;
+  display:block !important;
+  width:100% !important;
+  height:clamp(390px,54dvh,540px) !important;
+  min-height:390px !important;
+  max-height:540px !important;
+  margin:
+    0
+    auto
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 22px)
+    !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:3px solid #d1131b !important;
+  border-radius:18px !important;
+  box-sizing:border-box !important;
+  background:#eef0f3 !important;
+  box-shadow:0 8px 22px rgba(17,22,31,.12) !important;
+  contain:layout paint !important;
+  isolation:isolate !important;
+}
+
+.page[data-page="map"] #googleMap > div,
+.page[data-page="map"] #googleMap .gm-style{
+  width:100% !important;
+  height:100% !important;
+  border-radius:14px !important;
+}
+
+.page[data-page="map"] #mapPreviewList{
+  display:none !important;
+}
+
+.bottom-nav{
+  position:fixed !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:0 !important;
+  transform:translateX(-50%) !important;
+  width:min(100%,1180px) !important;
+  height:
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom))
+    !important;
+  min-height:var(--cp-v102-nav-height) !important;
+  padding-bottom:var(--safe-bottom) !important;
+  display:grid !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  z-index:2147483640 !important;
+  background:#fff !important;
+  border-top:1px solid #d8dce2 !important;
+  box-shadow:0 -7px 22px rgba(12,18,28,.15) !important;
+}
+
+@media(max-height:760px){
+  .page[data-page="map"] #googleMap{
+    height:400px !important;
+    min-height:400px !important;
+  }
+}
+
+@media(max-width:520px){
+  :root{
+    --cp-v102-side:12px;
+    --cp-v102-nav-height:66px;
+  }
+
+  .page[data-page="map"] #googleMap{
+    height:430px !important;
+    min-height:430px !important;
+    border-radius:16px !important;
+  }
+}
+
+
+/* Combusplus 10.3: error y scroll del mapa corregidos */
+html:has(.page[data-page="map"].is-active),
+body:has(.page[data-page="map"].is-active),
+body.cp-map-screen{
+  height:auto !important;
+  min-height:100% !important;
+  max-height:none !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  overscroll-behavior-y:auto !important;
+  touch-action:pan-y !important;
+}
+
+body.cp-map-screen .app-shell,
+body:has(.page[data-page="map"].is-active) .app-shell{
+  position:relative !important;
+  height:auto !important;
+  min-height:100dvh !important;
+  max-height:none !important;
+  overflow:visible !important;
+}
+
+body.cp-map-screen main,
+body:has(.page[data-page="map"].is-active) main{
+  position:relative !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:visible !important;
+  padding-bottom:
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 34px)
+    !important;
+}
+
+.page[data-page="map"],
+.page[data-page="map"].is-active{
+  position:relative !important;
+  inset:auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:visible !important;
+  touch-action:pan-y !important;
+}
+
+.page[data-page="map"] #googleMap{
+  position:relative !important;
+  display:block !important;
+  width:calc(100% - 4px) !important;
+  height:440px !important;
+  min-height:440px !important;
+  max-height:440px !important;
+  margin:
+    0
+    2px
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 34px)
+    !important;
+  overflow:hidden !important;
+  border:3px solid #d1131b !important;
+  border-radius:18px !important;
+  box-sizing:border-box !important;
+}
+
+.page[data-page="map"] #googleMap .gm-style,
+.page[data-page="map"] #googleMap > div{
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+}
+
+.bottom-nav{
+  position:fixed !important;
+  bottom:0 !important;
+  z-index:2147483647 !important;
+}
+
+@media(max-height:760px){
+  .page[data-page="map"] #googleMap{
+    height:400px !important;
+    min-height:400px !important;
+    max-height:400px !important;
+  }
+}
+
+
+/* Combusplus 10.4: cabecera alineada y carga del mapa */
+.page[data-page="map"],
+.page[data-page="map"].is-active{
+  width:100% !important;
+  padding:18px max(16px,var(--safe-right))
+    calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 28px)
+    max(16px,var(--safe-left)) !important;
+  box-sizing:border-box !important;
+}
+.page[data-page="map"] .page-head{
+  width:100% !important;
+  margin:0 0 16px !important;
+  padding:0 2px !important;
+  box-sizing:border-box !important;
+}
+.page[data-page="map"] .page-head>*{min-width:0 !important;}
+.page[data-page="map"] #refreshMap{margin-right:0 !important;}
+.page[data-page="map"] .map-search-card,
+.page[data-page="map"] .map-open-filter-card,
+.page[data-page="map"] .map-toolbar,
+.page[data-page="map"] #googleMap{
+  width:100% !important;
+  max-width:100% !important;
+  margin-left:0 !important;
+  margin-right:0 !important;
+  box-sizing:border-box !important;
+}
+.page[data-page="map"] #googleMap{
+  height:440px !important;
+  min-height:440px !important;
+  max-height:440px !important;
+  margin-bottom:calc(var(--cp-v102-nav-height) + var(--safe-bottom) + 30px) !important;
+}
+.map-load-error{
+  min-height:100%;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;padding:24px;text-align:center;
+  background:#f1f3f6;color:#17191d;
+}
+.map-load-error strong{font-size:20px;}
+.map-load-error p{max-width:520px;margin:0;color:#646a73;}
+.map-load-error button{
+  min-height:46px;padding:0 20px;border:1px solid #c7cbd2;
+  border-radius:8px;background:#fff;color:#17191d;font-weight:800;
+}
+@media(max-width:520px){
+  .page[data-page="map"],.page[data-page="map"].is-active{
+    padding-left:14px !important;padding-right:14px !important;
+  }
+  .page[data-page="map"] #googleMap{
+    height:420px !important;min-height:420px !important;max-height:420px !important;
+  }
+}
+
+
+/* Combusplus 10.5: buscadores, filtros y descuentos */
+.map-search-card,
+.best-search-filters{
+  width:100%;
+  margin:0 0 12px;
+  padding:14px 16px;
+  border:1px solid #d8dbe0;
+  border-radius:12px;
+  background:#fff;
+  box-sizing:border-box;
+}
+
+.map-search-field{
+  display:grid;
+  gap:8px;
+  font-weight:800;
+}
+
+.map-search-field > div{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+}
+
+.map-search-field input,
+.best-search-name input{
+  width:100%;
+  min-width:0;
+  min-height:48px;
+  padding:0 14px;
+  border:1px solid #cbd0d7;
+  border-radius:10px;
+  background:#fff;
+  color:#17191d;
+  font:inherit;
+  box-sizing:border-box;
+}
+
+.map-search-field button{
+  min-height:48px;
+  padding:0 16px;
+  border:1px solid #cbd0d7;
+  border-radius:10px;
+  background:#fff;
+  color:#17191d;
+  font-weight:800;
+}
+
+.best-search-filters{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:end;
+  gap:14px;
+}
+
+.best-search-name{
+  display:grid;
+  gap:8px;
+  min-width:0;
+  font-weight:800;
+}
+
+.best-search-open{
+  min-height:48px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 12px;
+  border:1px solid #cbd0d7;
+  border-radius:10px;
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.best-search-open input{
+  width:22px;
+  height:22px;
+  accent-color:#d1131b;
+}
+
+.best-discount-badge{
+  margin:12px 0;
+  padding:12px 14px;
+  border:1px solid #f2c14e;
+  border-radius:10px;
+  background:#fff6d8;
+  color:#6b4a00;
+  font-weight:900;
+  line-height:1.35;
+}
+
+.station-discount:not(:empty){
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  margin-top:5px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#fff1bd;
+  color:#6b4a00;
+  font-weight:850;
+}
+
+@media(max-width:620px){
+  .best-search-filters{
+    grid-template-columns:1fr;
+  }
+
+  .best-search-open{
+    white-space:normal;
+  }
+
+  .map-search-field > div{
+    grid-template-columns:minmax(0,1fr) 96px;
+  }
+}
+
+
+/* Combusplus 10.6: búsqueda rentable por ruta */
+.route-destination-step{
+  margin-top:22px;
+}
+
+.route-destination-field input{
+  width:100%;
+  min-height:50px;
+  padding:0 14px;
+  border:1px solid #cbd0d7;
+  border-radius:10px;
+  background:#fff;
+  color:#17191d;
+  font:inherit;
+  box-sizing:border-box;
+}
+
+.route-detour-field small{
+  display:block;
+  margin-top:6px;
+  color:#747982;
+  font-size:12px;
+  line-height:1.35;
+}
+
+.best-route-summary{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin:12px 0;
+  padding:14px;
+  border:1px solid #d7dbe1;
+  border-radius:12px;
+  background:#f8f9fb;
+}
+
+.best-route-summary[hidden]{
+  display:none !important;
+}
+
+.best-route-summary > div{
+  min-width:0;
+  display:grid;
+  gap:4px;
+  padding:10px;
+  border-radius:10px;
+  background:#fff;
+}
+
+.best-route-summary span{
+  color:#777d86;
+  font-size:11px;
+  font-weight:750;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+
+.best-route-summary strong{
+  color:#17191d;
+  font-size:15px;
+  overflow-wrap:anywhere;
+}
+
+.best-route-summary p{
+  grid-column:1 / -1;
+  margin:2px 0 0;
+  color:#5f6570;
+  font-size:12px;
+  line-height:1.45;
+}
+
+@media(max-width:560px){
+  .best-route-summary{
+    grid-template-columns:1fr;
+  }
+
+  .best-route-summary p{
+    grid-column:auto;
+  }
+}

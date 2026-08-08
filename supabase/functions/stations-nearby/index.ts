@@ -8,7 +8,9 @@ import {
 } from '../_shared/security.ts';
 
 function numberParam(url: URL, name: string, min: number, max: number): number | null {
-  const value = Number(url.searchParams.get(name));
+  const raw = url.searchParams.get(name);
+  if (raw == null || !raw.trim()) return null;
+  const value = Number(raw);
   return Number.isFinite(value) && value >= min && value <= max ? value : null;
 }
 
@@ -45,7 +47,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse(req, {
       ok: true,
-      version: '9.0.0',
+      version: '10.6.3',
       items,
       count: items.length,
       cache: {

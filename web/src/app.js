@@ -14,7 +14,7 @@ import {
 } from './core.js';
 
 const RUNTIME_CONFIG = window.COMBUSPLUS_CONFIG || {};
-const APP_VERSION = String(RUNTIME_CONFIG.version || '9.0.0');
+const APP_VERSION = String(RUNTIME_CONFIG.version || '10.6.3');
 
 const STORAGE = {
   settings: 'combusplus.v5.settings',
@@ -52,7 +52,11 @@ const DEFAULT_FILTERS = {
   priceDisplay: 'liter',
   amount: 50,
   consumption: 6.5,
-  tripMode: 'roundtrip'
+  tripMode: 'roundtrip',
+  stationQuery: '',
+  searchOpenOnly: false,
+  destination: '',
+  maxDetourKm: 5
 };
 
 const state = {
@@ -93,6 +97,7 @@ const el = {
 
   quickSearchForm: $('#quickSearchForm'),
   quickVehicle: $('#quickVehicle'),
+  quickDestination: $('#quickDestination'),
   quickConsumption: $('#quickConsumption'),
   quickTankCapacity: $('#quickTankCapacity'),
   quickFuel: $('#quickFuel'),
@@ -118,6 +123,8 @@ const el = {
   bestDistance: $('#bestDistance'),
   bestNetLiters: $('#bestNetLiters'),
   bestRefuelCost: $('#bestRefuelCost'),
+  bestRouteSummary: $('#bestRouteSummary'),
+  bestDiscountBadge: $('#bestDiscountBadge'),
 
   comparisonDialog: $('#comparisonDialog'),
   compareBestName: $('#compareBestName'),
@@ -145,12 +152,17 @@ const el = {
   listRadius: $('#listRadius'),
   listSort: $('#listSort'),
   searchStations: $('#searchStations'),
+  quickStationQuery: $('#quickStationQuery'),
+  quickOpenOnly: $('#quickOpenOnly'),
   listSummary: $('#listSummary'),
   stationList: $('#stationList'),
 
   refreshMap: $('#refreshMap'),
   mapModeLabel: $('#mapModeLabel'),
   mapTopTenToggle: $('#mapTopTenToggle'),
+  mapSearch: $('#mapSearch'),
+  clearMapSearch: $('#clearMapSearch'),
+  mapOpenOnly: $('#mapOpenOnly'),
   googleMap: $('#googleMap'),
   configureMap: $('#configureMap'),
   mapPreviewList: $('#mapPreviewList'),
@@ -325,7 +337,7 @@ function loadState() {
   }
 }
 function saveSettings() { writeJSON(STORAGE.settings, state.settings); syncNativeConfig(); }
-function saveFavorites() { writeJSON(STORAGE.favorites, state.favorites); renderFavorites(); renderHomeWidgets(); renderStations(); renderMapPreview(); syncNativeConfig(); }
+function saveFavorites() { writeJSON(STORAGE.favorites, state.favorites); renderFavorites(); renderHomeWidgets(); renderStations(); renderMapPreview(); syncNativeConfig(); syncFavoritesWidgetV98(); }
 function saveSnapshots() { writeJSON(STORAGE.snapshots, state.snapshots); renderHomeWidgets(); syncNativeConfig(); }
 function saveVehicles() {
   writeJSON(STORAGE.vehicles, state.vehicles);
@@ -400,21 +412,119 @@ function updateSearchModeUi() {
   }
 }
 
+
+function routeMapsUrlV106(station, destination) {
+  if (
+    !Number.isFinite(Number(state.position?.latitude)) ||
+    !Number.isFinite(Number(state.position?.longitude)) ||
+    !Number.isFinite(Number(station?.latitude)) ||
+    !Number.isFinite(Number(station?.longitude))
+  ) {
+    return mapsUrl(station);
+  }
+
+  const query = new URLSearchParams({
+    api: '1',
+    origin:
+      `${state.position.latitude},${state.position.longitude}`,
+    destination: String(destination || ''),
+    waypoints:
+      `${station.latitude},${station.longitude}`,
+    travelmode: 'driving'
+  });
+
+  return `https://www.google.com/maps/dir/?${query}`;
+}
+
+function routeTimeLabelV106(seconds) {
+  const minutes = Math.max(
+    0,
+    Math.round(Number(seconds || 0) / 60)
+  );
+
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  return remaining
+    ? `${hours} h ${remaining} min`
+    : `${hours} h`;
+}
+
+function renderRouteSummaryV106(simulation) {
+  if (!el.bestRouteSummary) return;
+
+  const best = simulation?.best;
+  if (!simulation?.routeBased || !best) {
+    el.bestRouteSummary.hidden = true;
+    el.bestRouteSummary.replaceChildren();
+    return;
+  }
+
+  const stopCopy =
+    best.stopLeg === 'return'
+      ? 'parada recomendada durante la vuelta'
+      : 'parada recomendada durante la ida';
+
+  el.bestRouteSummary.innerHTML = `
+    <div>
+      <span>Destino</span>
+      <strong>${escapeHtml(simulation.input.destination)}</strong>
+    </div>
+    <div>
+      <span>Ruta total</span>
+      <strong>${num(Number(best.routeTotalKm), 1)} km</strong>
+    </div>
+    <div>
+      <span>Desvío adicional</span>
+      <strong>${num(Number(best.detourKm), 1)} km</strong>
+    </div>
+    <div>
+      <span>Tiempo estimado</span>
+      <strong>${routeTimeLabelV106(best.routeDurationSeconds)}</strong>
+    </div>
+    <p>${escapeHtml(stopCopy)} · El consumo del vehículo y los descuentos están incluidos en el cálculo.</p>
+  `;
+  el.bestRouteSummary.hidden = false;
+}
+
 function currentSearchInput() {
-  const vehicle = state.vehicles.find(item => item.id === el.quickVehicle.value) || null;
-  const selectedTrip = $('input[name="quickTrip"]:checked')?.value || 'roundtrip';
-  const fullTank = selectedSearchMode() === 'fullTank';
+  const vehicle = state.vehicles.find(
+    item => item.id === el.quickVehicle.value
+  ) || null;
+
+  const selectedTrip =
+    $('input[name="quickTrip"]:checked')?.value ||
+    'roundtrip';
+
+  const fullTank =
+    selectedSearchMode() === 'fullTank';
+
   return {
     vehicle,
     vehicleId: vehicle?.id || '',
     fuelKey: vehicle?.fuelKey || el.quickFuel.value,
-    consumption: Number(vehicle?.consumption ?? el.quickConsumption.value),
-    tankCapacity: Number(vehicle?.tank ?? el.quickTankCapacity?.value),
+    consumption: Number(
+      vehicle?.consumption ??
+      el.quickConsumption.value
+    ),
+    tankCapacity: Number(
+      vehicle?.tank ??
+      el.quickTankCapacity?.value
+    ),
     amount: Number(el.quickAmount.value),
     radius: Number(el.quickRadius.value),
+    maxDetourKm: Number(el.quickRadius.value),
+    destination:
+      el.quickDestination?.value.trim() || '',
     tripMode: selectedTrip,
     discounts: state.discounts,
-    fullTank
+    fullTank,
+    stationQuery:
+      el.quickStationQuery?.value.trim() || '',
+    openOnly: Boolean(el.quickOpenOnly?.checked)
   };
 }
 
@@ -422,10 +532,34 @@ function syncSearchControls(input) {
   state.filters.fuelKey = input.fuelKey;
   state.filters.consumption = input.consumption;
   state.filters.amount = input.amount;
-  state.filters.radius = input.radius;
+  state.filters.radius = input.maxDetourKm;
+  state.filters.maxDetourKm = input.maxDetourKm;
+  state.filters.destination =
+    String(input.destination || '');
   state.filters.tripMode = input.tripMode;
+  state.filters.stationQuery =
+    String(input.stationQuery || '');
+  state.filters.searchOpenOnly =
+    Boolean(input.openOnly);
+
   el.listFuel.value = input.fuelKey;
-  el.listRadius.value = String(input.radius);
+  el.listRadius.value = String(input.maxDetourKm);
+
+  if (el.quickDestination) {
+    el.quickDestination.value =
+      state.filters.destination;
+  }
+
+  if (el.quickStationQuery) {
+    el.quickStationQuery.value =
+      state.filters.stationQuery;
+  }
+
+  if (el.quickOpenOnly) {
+    el.quickOpenOnly.checked =
+      state.filters.searchOpenOnly;
+  }
+
   saveFilters();
 }
 
@@ -783,40 +917,185 @@ function rankStations(stations, input) {
   return input?.fullTank ? rankFullTankStations(stations, input) : rankNormalizedStations(stations, input);
 }
 
+
+function normalizedSearchV105(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function stationMatchesQueryV105(station, query) {
+  const needle = normalizedSearchV105(query);
+  if (!needle) return true;
+
+  const haystack = normalizedSearchV105(
+    `${station?.name || ''} ${station?.brand || ''} ${station?.address || ''}`
+  );
+  return haystack.includes(needle);
+}
+
+function stationMatchesBestFiltersV105(station, input) {
+  if (input?.openOnly && station?.isOpen !== true) {
+    return false;
+  }
+  return stationMatchesQueryV105(
+    station,
+    input?.stationQuery || ''
+  );
+}
+
+function discountDisplayV105(station, fuelKey) {
+  const discount = Number(
+    station?.discount ??
+    discountForStation(
+      station,
+      fuelKey,
+      state.discounts
+    )
+  );
+
+  const basePrice = Number(
+    station?.basePrice ??
+    stationBasePrice(station, fuelKey)
+  );
+
+  if (!Number.isFinite(discount) || discount <= 0) {
+    return null;
+  }
+
+  const personal = Number(
+    station?.price ??
+    stationPrice(station, fuelKey)
+  );
+
+  return {
+    discount,
+    basePrice:
+      Number.isFinite(basePrice)
+        ? basePrice
+        : (
+            Number.isFinite(personal)
+              ? personal + discount
+              : null
+          ),
+    personal:
+      Number.isFinite(personal)
+        ? personal
+        : null
+  };
+}
+
 function filteredStations() {
-  let items = state.stations.filter(station => stationPrice(station));
-  if (state.filters.openFilter === 'open') items = items.filter(station => station.isOpen === true);
+  let items = state.stations.filter(
+    station => stationPrice(station)
+  );
+
+  const query =
+    state.filters.stationQuery || '';
+
+  if (query) {
+    items = items.filter(
+      station =>
+        stationMatchesQueryV105(
+          station,
+          query
+        )
+    );
+  }
+
+  if (
+    state.filters.searchOpenOnly ||
+    state.filters.openFilter === 'open'
+  ) {
+    items = items.filter(
+      station => station.isOpen === true
+    );
+  }
 
   if (state.filters.sort === 'effective') {
     return rankStations(items, rankingInput());
   }
+
   const fuelKey = state.filters.fuelKey;
   items.sort((a, b) => {
-    if (state.filters.sort === 'distance') return a.distanceKm - b.distanceKm;
-    if (state.filters.sort === 'name') return a.name.localeCompare(b.name, 'es');
-    return (stationBasePrice(a, fuelKey) || 99) - (stationBasePrice(b, fuelKey) || 99);
+    if (state.filters.sort === 'distance') {
+      return a.distanceKm - b.distanceKm;
+    }
+    if (state.filters.sort === 'name') {
+      return a.name.localeCompare(b.name, 'es');
+    }
+    return (
+      (stationBasePrice(a, fuelKey) || 99) -
+      (stationBasePrice(b, fuelKey) || 99)
+    );
   });
+
   return items;
 }
 
 function validateSearch(input) {
-  if (!Number.isFinite(input.consumption) || input.consumption < 1 || input.consumption > 30) return 'Indica un consumo entre 1 y 30 l/100 km.';
+  if (
+    !String(input.destination || '').trim() ||
+    String(input.destination || '').trim().length < 3
+  ) {
+    return 'Indica la dirección a la que quieres ir.';
+  }
+
+  if (
+    !Number.isFinite(input.consumption) ||
+    input.consumption < 1 ||
+    input.consumption > 30
+  ) {
+    return 'Indica un consumo entre 1 y 30 l/100 km.';
+  }
+
   if (input.fullTank) {
-    if (!Number.isFinite(input.tankCapacity) || input.tankCapacity < 10 || input.tankCapacity > 200) return 'Indica una capacidad de depósito entre 10 y 200 litros.';
-  } else if (!Number.isFinite(input.amount) || input.amount < 5 || input.amount > 500) {
+    if (
+      !Number.isFinite(input.tankCapacity) ||
+      input.tankCapacity < 10 ||
+      input.tankCapacity > 200
+    ) {
+      return 'Indica una capacidad de depósito entre 10 y 200 litros.';
+    }
+  } else if (
+    !Number.isFinite(input.amount) ||
+    input.amount < 5 ||
+    input.amount > 500
+  ) {
     return 'Indica un importe entre 5 € y 500 €.';
   }
-  if (!Number.isFinite(input.radius) || input.radius < 1 || input.radius > 50) return 'Indica un radio entre 1 y 50 km.';
+
+  if (
+    !Number.isFinite(input.maxDetourKm) ||
+    input.maxDetourKm < 0.5 ||
+    input.maxDetourKm > 25
+  ) {
+    return 'Indica un desvío máximo entre 0,5 y 25 km.';
+  }
+
   return '';
 }
 
-function recommendationRequest(input, selectedStationId = '') {
-  if (!state.position) throw new Error('La ubicación todavía no está disponible.');
+function recommendationRequest(
+  input,
+  selectedStationId = ''
+) {
+  if (!state.position) {
+    throw new Error(
+      'La ubicación todavía no está disponible.'
+    );
+  }
+
   return {
     latitude: state.position.latitude,
     longitude: state.position.longitude,
-    radius: input.radius,
-    limit: 100,
+    destination:
+      String(input.destination || '').trim(),
+    radius: input.maxDetourKm,
+    maxDetourKm: input.maxDetourKm,
+    limit: 30,
     fuelKey: input.fuelKey,
     consumption: input.consumption,
     amount: input.amount,
@@ -824,19 +1103,43 @@ function recommendationRequest(input, selectedStationId = '') {
     tripMode: input.tripMode,
     fullTank: Boolean(input.fullTank),
     discounts: state.discounts,
-    selectedStationId: selectedStationId || undefined
+    stationQuery:
+      String(input.stationQuery || '').trim() ||
+      undefined,
+    openOnly:
+      Boolean(input.openOnly) || undefined,
+    selectedStationId:
+      selectedStationId || undefined
   };
 }
 
 async function fetchRecommendation(input) {
   await requestPosition();
-  const payload = await apiFetch('recommend', '', {
-    method: 'POST',
-    body: recommendationRequest(input)
-  });
-  state.stations = Array.isArray(payload.items) ? payload.items : [];
-  recordSnapshots(state.stations);
-  if (!payload.best) throw new Error('No hay gasolineras compatibles dentro del radio seleccionado.');
+
+  const payload = await apiFetch(
+    'route-recommend',
+    '',
+    {
+      method: 'POST',
+      body: recommendationRequest(input)
+    }
+  );
+
+  state.stations =
+    Array.isArray(payload.items)
+      ? payload.items
+      : [];
+
+  if (state.stations.length) {
+    recordSnapshots(state.stations);
+  }
+
+  if (!payload.best) {
+    throw new Error(
+      'No hay gasolineras rentables en la ruta con el desvío seleccionado.'
+    );
+  }
+
   return payload;
 }
 
@@ -868,7 +1171,9 @@ async function executeSearch(event) {
       radius: input.radius,
       vehicleId: input.vehicleId,
       registered: false,
-      serverCalculated: true
+      serverCalculated: true,
+      routeBased: true,
+      route: payload.route || null
     };
     renderBestResult();
     renderStations();
@@ -886,14 +1191,41 @@ async function executeSearch(event) {
   }
 }
 
-async function runFullTankSearch({ openRoute = false } = {}) {
+async function runFullTankSearch({
+  openRoute = false
+} = {}) {
   clearError(el.quickSearchError);
+
   const vehicle = activeVehicle();
-  if (!vehicle || !Number.isFinite(Number(vehicle.tank)) || Number(vehicle.tank) <= 0) {
-    toast('Añade un vehículo con la capacidad de su depósito.');
+  if (
+    !vehicle ||
+    !Number.isFinite(Number(vehicle.tank)) ||
+    Number(vehicle.tank) <= 0
+  ) {
+    toast(
+      'Añade un vehículo con la capacidad de su depósito.'
+    );
     openVehicleDialog(vehicle || null);
     return;
   }
+
+  const destination =
+    el.quickDestination?.value.trim() ||
+    state.filters.destination ||
+    '';
+
+  if (!destination) {
+    navigate('list');
+    toast(
+      'Indica primero la dirección a la que quieres ir.'
+    );
+    window.setTimeout(
+      () => el.quickDestination?.focus(),
+      180
+    );
+    return;
+  }
+
   const input = {
     vehicle,
     vehicleId: vehicle.id,
@@ -901,25 +1233,49 @@ async function runFullTankSearch({ openRoute = false } = {}) {
     consumption: Number(vehicle.consumption),
     tankCapacity: Number(vehicle.tank),
     amount: 0,
-    radius: Number(el.quickRadius.value) || Number(state.filters.radius) || 15,
-    tripMode: $('input[name="quickTrip"]:checked')?.value || state.filters.tripMode || 'roundtrip',
+    radius:
+      Number(el.quickRadius.value) ||
+      Number(state.filters.maxDetourKm) ||
+      5,
+    maxDetourKm:
+      Number(el.quickRadius.value) ||
+      Number(state.filters.maxDetourKm) ||
+      5,
+    destination,
+    tripMode:
+      $('input[name="quickTrip"]:checked')?.value ||
+      state.filters.tripMode ||
+      'roundtrip',
     discounts: state.discounts,
+    stationQuery:
+      el.quickStationQuery?.value.trim() || '',
+    openOnly: Boolean(el.quickOpenOnly?.checked),
     fullTank: true
   };
+
   const error = validateSearch(input);
   if (error) {
     toast(error);
-    openVehicleDialog(vehicle);
     return;
   }
 
-  syncSearchControls({ ...input, amount: state.filters.amount || 50 });
+  syncSearchControls({
+    ...input,
+    amount: state.filters.amount || 50
+  });
+
   if (el.fullTankButton) {
     el.fullTankButton.disabled = true;
-    const label = el.fullTankButton.querySelector('span');
-    if (label) label.textContent = 'Calculando la mejor opción…';
+    const label =
+      el.fullTankButton.querySelector('span');
+    if (label) {
+      label.textContent =
+        'Calculando la mejor parada de la ruta…';
+    }
   }
-  el.stationList.innerHTML = '<div class="loading">Comparando el coste del depósito y del desplazamiento…</div>';
+
+  el.stationList.innerHTML =
+    '<div class="loading">Calculando ruta, desvíos, descuentos y consumo…</div>';
   el.bestResult.hidden = true;
 
   try {
@@ -927,35 +1283,74 @@ async function runFullTankSearch({ openRoute = false } = {}) {
     const best = payload.best;
     const nearest = payload.nearest || best;
     const saving = Number(payload.saving || 0);
-    input.amount = Number(best.tankCost || input.tankCapacity * best.price);
+
+    input.amount = Number(
+      best.tankCost ||
+      input.tankCapacity * best.price
+    );
+
     state.currentSimulation = {
       best,
       nearest,
       saving,
       input,
       mode: 'fullTank',
-      radius: input.radius,
+      radius: input.maxDetourKm,
       vehicleId: vehicle.id,
       registered: false,
-      serverCalculated: true
+      serverCalculated: true,
+      routeBased: true,
+      route: payload.route || null
     };
+
     renderBestResult();
     renderStations();
     renderMapPreview();
     await checkFavoritePrices(false);
-    state.analytics.cityApprox = approximateCityFromAddress(best.address);
-    sendAnalyticsEvent('full_tank_widget_search', { tripMode: input.tripMode, radius: input.radius });
-    el.bestResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    toast('Mejor gasolinera calculada. Pulsa «Abrir ruta» para ir a repostar.');
-    if (openRoute) window.setTimeout(() => { window.location.href = mapsUrl(best); }, 250);
+
+    state.analytics.cityApprox =
+      approximateCityFromAddress(best.address);
+
+    sendAnalyticsEvent(
+      'route_full_tank_search',
+      {
+        tripMode: input.tripMode,
+        maxDetourKm: input.maxDetourKm
+      }
+    );
+
+    el.bestResult.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+
+    toast(
+      'Mejor parada calculada según ruta, precio y consumo.'
+    );
+
+    if (openRoute) {
+      window.setTimeout(() => {
+        window.location.href =
+          routeMapsUrlV106(best, destination);
+      }, 250);
+    }
   } catch (searchError) {
-    el.stationList.replaceChildren(emptyState(searchError.message));
-    showError(el.quickSearchError, searchError.message);
+    el.stationList.replaceChildren(
+      emptyState(searchError.message)
+    );
+    showError(
+      el.quickSearchError,
+      searchError.message
+    );
   } finally {
     if (el.fullTankButton) {
       el.fullTankButton.disabled = false;
-      const label = el.fullTankButton.querySelector('span');
-      if (label) label.textContent = 'Buscar la mejor gasolinera';
+      const label =
+        el.fullTankButton.querySelector('span');
+      if (label) {
+        label.textContent =
+          'Buscar la mejor gasolinera';
+      }
     }
   }
 }
@@ -982,6 +1377,28 @@ function renderBestResult() {
   el.bestName.textContent = best.name;
   el.bestAddress.textContent = best.address;
   el.bestPrice.textContent = `${num(best.price)} €/l`;
+
+  const discountInfoV105 = discountDisplayV105(
+    best,
+    simulation.input.fuelKey
+  );
+
+  if (el.bestDiscountBadge) {
+    if (discountInfoV105) {
+      const beforeCopy =
+        Number.isFinite(discountInfoV105.basePrice)
+          ? ` · Precio sin descuento: ${num(discountInfoV105.basePrice)} €/l`
+          : '';
+
+      el.bestDiscountBadge.textContent =
+        `DESCUENTO APLICADO: −${num(discountInfoV105.discount)} €/l${beforeCopy}`;
+      el.bestDiscountBadge.hidden = false;
+    } else {
+      el.bestDiscountBadge.hidden = true;
+      el.bestDiscountBadge.textContent = '';
+    }
+  }
+
   const isRoundTrip = simulation.input.tripMode !== 'oneway';
   const calculatedTripKm = Number(best.tripKm ?? (best.roadDistanceKm * (isRoundTrip ? 2 : 1)));
   const refuelCost = simulation.mode === 'fullTank'
@@ -990,11 +1407,13 @@ function renderBestResult() {
   el.bestDistance.textContent = `${num(calculatedTripKm, 1)} km · ${isRoundTrip ? 'ida y vuelta' : 'solo ida'}`;
   el.bestNetLiters.textContent = `${num(best.netLiters, 2)} l`;
   if (el.bestRefuelCost) el.bestRefuelCost.textContent = euro.format(refuelCost);
+  renderRouteSummaryV106(simulation);
+
   el.bestSaving.textContent = euro.format(saving);
   el.bestSavingCopy.textContent = simulation.mode === 'fullTank'
     ? (nearest.id === best.id ? 'la opción más cercana también es la mejor para llenar el depósito' : `frente a llenar el depósito en ${nearest.name}`)
     : (nearest.id === best.id ? 'la opción más cercana también es la mejor' : `frente a ${nearest.name}`);
-  el.bestRoute.href = mapsUrl(best);
+  el.bestRoute.href = routeMapsUrlV106(best, simulation.input.destination);
   el.bestFavorite.textContent = isFavorite(best.id) ? '★' : '☆';
   el.bestFavorite.classList.toggle('is-favorite', isFavorite(best.id));
   el.markRefueled.disabled = Boolean(simulation.registered);
@@ -1085,7 +1504,7 @@ function renderStations() {
     node.querySelector('.station-price').textContent = displayPrice(station);
     const discount = discountForStation(station, state.filters.fuelKey, state.discounts);
     node.querySelector('.station-discount').textContent = discount ? `Descuento: −${num(discount)} €/l` : '';
-    node.querySelector('.station-distance').textContent = `${num(station.distanceKm, 1)} km`;
+    node.querySelector('.station-distance').textContent = Number.isFinite(Number(station.detourKm)) ? `Desvío ${num(Number(station.detourKm), 1)} km` : `${num(station.distanceKm, 1)} km`;
     node.querySelector('.station-hours').textContent = station.schedule;
     node.querySelector('.station-net').textContent = scored ? `${num(scored.netLiters, 2)} l útiles tras el trayecto` : '';
     node.querySelector('.station-rank-note').textContent = isBest ? 'MEJOR OPCIÓN' : scoreInfo ? `Puesto ${scoreInfo.index + 1}` : '';
@@ -1421,130 +1840,358 @@ function renderHistoryChart(points) {
 }
 
 function mapStations() {
-  let items = filteredStations();
-  if (state.filters.mapMode === 'top10' || el.mapTopTenToggle.getAttribute('aria-pressed') === 'true') {
-    items = [...items].sort((a, b) => stationPrice(a) - stationPrice(b)).slice(0, 10);
+  let items = state.stations.filter(
+    station =>
+      stationPrice(station) &&
+      Number.isFinite(station.latitude) &&
+      Number.isFinite(station.longitude)
+  );
+
+  const query =
+    el.mapSearch?.value.trim() || '';
+
+  if (query) {
+    items = items.filter(
+      station =>
+        stationMatchesQueryV105(
+          station,
+          query
+        )
+    );
   }
+
+  if (el.mapOpenOnly?.checked) {
+    items = items.filter(
+      station => station.isOpen === true
+    );
+  }
+
   return items;
 }
 
+function renderNativeEmbeddedMap() {
+  if (!isNative() || !el.googleMap) return false;
+
+  const activeMapPage = document.querySelector(
+    '.page.is-active[data-page="map"]'
+  );
+  const dialogOpen = Boolean(document.querySelector('dialog[open]'));
+
+  if (!activeMapPage || dialogOpen) {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+    return true;
+  }
+
+  const rect = el.googleMap.getBoundingClientRect();
+  if (rect.width < 40 || rect.height < 80) {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+    return true;
+  }
+
+  const style = getComputedStyle(el.googleMap);
+  const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+  const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+  const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
+  const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+  const mapLeft = rect.left + borderLeft;
+  const mapTop = rect.top + borderTop;
+  const mapWidth = Math.max(1, rect.width - borderLeft - borderRight);
+  const mapHeight = Math.max(1, rect.height - borderTop - borderBottom);
+  const navRect = document.querySelector('.bottom-nav')?.getBoundingClientRect();
+  const navigationTop = Number.isFinite(navRect?.top) ? navRect.top : window.innerHeight;
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth || rect.width;
+
+  const items = mapStations()
+    .filter(station => Number.isFinite(station.latitude) && Number.isFinite(station.longitude))
+    .map(station => ({
+      id: String(station.id),
+      name: station.name,
+      brand: station.brand || '',
+      address: station.address || '',
+      latitude: station.latitude,
+      longitude: station.longitude,
+      price: displayPrice(station),
+      status: station.isOpen === true
+        ? 'Abierta'
+        : station.isOpen === false ? 'Cerrada' : 'Estado no disponible',
+      schedule: station.schedule || '',
+      favorite: isFavorite(station.id)
+    }));
+
+  el.googleMap.replaceChildren();
+
+  try {
+    if (window.AndroidBridge?.renderNativeMapV2) {
+      window.AndroidBridge.renderNativeMapV2(
+        JSON.stringify({ items }),
+        mapLeft,
+        mapTop,
+        mapWidth,
+        mapHeight,
+        viewportWidth,
+        navigationTop
+      );
+    } else if (window.AndroidBridge?.renderNativeMap) {
+      window.AndroidBridge.renderNativeMap(
+        JSON.stringify({ items }),
+        mapLeft,
+        mapTop,
+        mapWidth,
+        mapHeight
+      );
+    } else {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  el.mapModeLabel.textContent = `${items.length} gasolineras`;
+  return true;
+}
+
+let nearbyStationsPromiseV103 = null;
+
+async function ensureNearbyStationsForMap(force = false) {
+  if (!force && state.stations.length > 0) return state.stations;
+
+  if (el.mapModeLabel) {
+    el.mapModeLabel.textContent = 'Buscando gasolineras cercanas…';
+  }
+
+  try {
+    await requestPosition(Boolean(force));
+    await fetchStations(Number(state.filters.radius) || 15);
+
+    state.stations.sort(
+      (a, b) =>
+        Number(a.distanceKm || 9999) -
+        Number(b.distanceKm || 9999)
+    );
+
+    if (typeof recordSnapshots === 'function') {
+      recordSnapshots(state.stations);
+    }
+
+    return state.stations;
+  } catch (error) {
+    const message = error?.message ||
+      'No se pudieron cargar las gasolineras cercanas.';
+
+    if (el.mapModeLabel) {
+      el.mapModeLabel.textContent = message;
+    }
+
+    throw new Error(message);
+  }
+}
+
 function loadGoogleMaps() {
-  if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
+  if (window.google?.maps?.Map) {
+    return Promise.resolve(window.google.maps);
+  }
+
   if (state.mapsPromise) return state.mapsPromise;
-  const apiKey = String(state.settings.googleMapsKey || '').trim();
-  if (!apiKey) return Promise.reject(new Error('Google Maps no está configurado. Se mostrará el mapa alternativo.'));
+
+  const apiKey = String(
+    state.settings.googleMapsKey ||
+    RUNTIME_CONFIG.googleMapsKey ||
+    ''
+  ).trim();
+
+  if (!apiKey) {
+    return Promise.reject(
+      new Error('Falta la clave de Google Maps para navegador.')
+    );
+  }
+
+  document.getElementById('combusplus-google-maps')?.remove();
 
   state.mapsPromise = new Promise((resolve, reject) => {
     const callback = `combusplusMapsReady_${Date.now()}`;
     const previousAuthFailure = window.gm_authFailure;
     let finished = false;
-    const finish = (error) => {
+
+    const finish = error => {
       if (finished) return;
       finished = true;
       clearTimeout(timeout);
-      try { delete window[callback]; } catch { window[callback] = undefined; }
+
+      try { delete window[callback]; }
+      catch { window[callback] = undefined; }
+
       window.gm_authFailure = previousAuthFailure;
+
       if (error) {
         state.mapsPromise = null;
+        document.getElementById('combusplus-google-maps')?.remove();
         reject(error);
       } else {
         resolve(window.google.maps);
       }
     };
-    window[callback] = () => finish(null);
-    window.gm_authFailure = () => finish(new Error('Google Maps ha rechazado la clave o sus restricciones. Se mostrará el mapa alternativo.'));
+
+    window[callback] = () => {
+      if (window.google?.maps?.Map) finish(null);
+      else finish(new Error('Google Maps no terminó de cargarse.'));
+    };
+
+    window.gm_authFailure = () => finish(
+      new Error('Google Maps ha rechazado la clave o sus restricciones.')
+    );
 
     const script = document.createElement('script');
     script.id = 'combusplus-google-maps';
     script.async = true;
     script.defer = true;
+
     const query = new URLSearchParams({
       key: apiKey,
       callback,
       language: 'es',
       region: 'ES',
       v: 'weekly',
-      loading: 'async'
+      loading: 'async',
+      auth_referrer_policy: 'origin'
     });
-    script.src = `https://maps.googleapis.com/maps/api/js?${query.toString()}`;
-    script.onerror = () => finish(new Error('No se pudo descargar Google Maps. Se mostrará el mapa alternativo.'));
+
+    script.src = `https://maps.googleapis.com/maps/api/js?${query}`;
+    script.onerror = () => finish(
+      new Error('No se pudo descargar Google Maps.')
+    );
+
     document.head.appendChild(script);
-    const timeout = setTimeout(() => finish(new Error('Google Maps ha tardado demasiado. Se mostrará el mapa alternativo.')), 12000);
+
+    const timeout = setTimeout(
+      () => finish(
+        new Error('Google Maps ha tardado demasiado en responder.')
+      ),
+      20000
+    );
   });
+
   return state.mapsPromise;
 }
 
-function renderOpenStreetMapFallback(items, cause = '') {
-  const station = state.currentSimulation?.best || items[0];
-  el.googleMap.innerHTML = '';
-  if (!station || !Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
-    el.googleMap.appendChild(emptyState(cause || 'No hay una ubicación válida para mostrar el mapa.'));
-    return;
-  }
-  const lat = station.latitude;
-  const lon = station.longitude;
-  const deltaLat = 0.06;
-  const deltaLon = 0.09;
-  const bbox = [lon - deltaLon, lat - deltaLat, lon + deltaLon, lat + deltaLat].join(',');
-  const frameUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}`;
-  const route = mapsUrl(station);
-  const wrapper = document.createElement('div');
-  wrapper.className = 'map-fallback';
-  wrapper.innerHTML = `<iframe title="Mapa de ${escapeHtml(station.name)}" loading="lazy" referrerpolicy="no-referrer" src="${frameUrl}"></iframe><div class="map-fallback-note"><span>${escapeHtml(cause || 'Mapa alternativo activo')} · Marcador en ${escapeHtml(station.name)}</span><a href="${route}" target="_blank" rel="noopener noreferrer">Abrir ruta</a></div>`;
-  el.googleMap.appendChild(wrapper);
-}
-
-async function renderMap() {
-  if (!state.stations.length) {
-    el.googleMap.innerHTML = '';
-    el.googleMap.appendChild(emptyState('Realiza una búsqueda desde la pestaña Buscar.'));
-    return;
-  }
-  const items = mapStations();
+async function renderMap(force = false) {
   try {
-    const maps = await loadGoogleMaps();
-    const center = state.position ? { lat: state.position.latitude, lng: state.position.longitude } : { lat: items[0]?.latitude || 40.4168, lng: items[0]?.longitude || -3.7038 };
-    if (!state.map) {
-      const mapOptions = {
-        center,
-        zoom: 12,
-        streetViewControl: false,
-        mapTypeControl: false,
-        fullscreenControl: true,
-        gestureHandling: 'greedy'
-      };
-      const mapId = String(state.settings.googleMapId || '').trim();
-      if (mapId && mapId !== 'DEMO_MAP_ID') mapOptions.mapId = mapId;
-      state.map = new maps.Map(el.googleMap, mapOptions);
+    await ensureNearbyStationsForMap(force);
+
+    const items = mapStations().filter(
+      station =>
+        Number.isFinite(station.latitude) &&
+        Number.isFinite(station.longitude)
+    );
+
+    if (!items.length) {
+      el.googleMap.replaceChildren(
+        emptyState('No hay gasolineras disponibles en esta zona.')
+      );
+      el.mapModeLabel.textContent = '0 gasolineras';
+      return;
     }
-    state.map.setCenter(center);
+
+    if (renderNativeEmbeddedMap()) {
+      renderMapPreview();
+      return;
+    }
+
+    const maps = await loadGoogleMaps();
+    el.googleMap.replaceChildren();
+
+    const center = state.position
+      ? {
+          lat: state.position.latitude,
+          lng: state.position.longitude
+        }
+      : {
+          lat: items[0].latitude,
+          lng: items[0].longitude
+        };
+
+    const options = {
+      center,
+      zoom: 12,
+      streetViewControl: false,
+      mapTypeControl: false,
+      fullscreenControl: false,
+      gestureHandling: 'greedy',
+      clickableIcons: false
+    };
+
+    const mapId = String(state.settings.googleMapId || '').trim();
+    if (mapId && mapId !== 'DEMO_MAP_ID') options.mapId = mapId;
+
+    state.map = new maps.Map(el.googleMap, options);
     state.markers.forEach(marker => marker.setMap?.(null));
     state.markers = [];
+
+    const bounds = new maps.LatLngBounds();
+
     for (const station of items) {
-      if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) continue;
+      const price = stationPrice(station);
       const marker = new maps.Marker({
-        position: { lat: station.latitude, lng: station.longitude },
+        position: {
+          lat: station.latitude,
+          lng: station.longitude
+        },
         map: state.map,
         title: station.name,
-        label: { text: num(stationPrice(station), 2), color: '#fff', fontWeight: '700' },
+        label: {
+          text: Number.isFinite(price) ? `${num(price)}€` : '—',
+          color: isFavorite(station.id) ? '#17191d' : '#ffffff',
+          fontWeight: '700',
+          fontSize: '11px'
+        },
         icon: {
           path: maps.SymbolPath.CIRCLE,
-          scale: 16,
-          fillColor: isFavorite(station.id) ? '#dca000' : '#b3131b',
+          scale: 25,
+          fillColor: isFavorite(station.id) ? '#ffc107' : '#d71920',
           fillOpacity: 1,
-          strokeColor: '#fff',
+          strokeColor: '#ffffff',
           strokeWeight: 2
         }
       });
+
       marker.addListener('click', () => openStationDetail(station));
       state.markers.push(marker);
+      bounds.extend(marker.getPosition());
     }
-    el.mapModeLabel.textContent = state.filters.mapMode === 'top10' ? '10 más baratas' : `${items.length} gasolineras`;
+
+    if (items.length === 1) {
+      state.map.setCenter(bounds.getCenter());
+      state.map.setZoom(14);
+    } else {
+      state.map.fitBounds(bounds, 42);
+    }
+
+    setTimeout(() => {
+      maps.event.trigger(state.map, 'resize');
+      if (items.length > 1) state.map.fitBounds(bounds, 42);
+    }, 120);
+
+    el.mapModeLabel.textContent = `${items.length} gasolineras`;
     renderMapPreview();
   } catch (error) {
-    renderOpenStreetMapFallback(items, error.message);
-    el.mapModeLabel.textContent = `${items.length} gasolineras · mapa alternativo`;
-    renderMapPreview();
+    const message = error?.message || 'No se pudo cargar el mapa.';
+    el.mapModeLabel.textContent = message;
+    el.googleMap.replaceChildren();
+
+    const panel = document.createElement('div');
+    panel.className = 'map-load-error';
+    panel.innerHTML = `
+      <strong>No se pudo cargar el mapa</strong>
+      <p>${escapeHtml(message)}</p>
+      <button type="button">Reintentar mapa</button>
+    `;
+
+    panel.querySelector('button').addEventListener('click', () => {
+      state.mapsPromise = null;
+      state.map = null;
+      renderMap(true);
+    });
+
+    el.googleMap.appendChild(panel);
   }
 }
 
@@ -1815,7 +2462,7 @@ function populateFilters() {
   if (open) open.checked = true;
   if (map) map.checked = true;
   if (price) price.checked = true;
-  el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));
+  el.mapTopTenToggle?.setAttribute('aria-pressed', 'false');
 }
 
 function clearAllLocalData() {
@@ -1900,11 +2547,16 @@ function bind() {
   el.listRadius.addEventListener('change', () => { state.filters.radius = Number(el.listRadius.value); saveFilters(); });
   el.listSort.addEventListener('change', () => { state.filters.sort = el.listSort.value; saveFilters(); renderStations(); });
 
-  el.refreshMap.addEventListener('click', async () => { await searchStations(); navigate('map'); });
+  el.refreshMap.addEventListener('click', async () => {
+    state.mapsPromise = null;
+    await searchStations();
+    navigate('map');
+    await renderMap(true);
+  });
   el.configureMap.addEventListener('click', () => renderMap());
-  el.mapTopTenToggle.addEventListener('click', () => {
+  el.mapTopTenToggle?.addEventListener('click', () => {
     state.filters.mapMode = state.filters.mapMode === 'top10' ? 'all' : 'top10';
-    el.mapTopTenToggle.setAttribute('aria-pressed', String(state.filters.mapMode === 'top10'));
+    el.mapTopTenToggle?.setAttribute('aria-pressed', 'false');
     saveFilters();
     renderMap();
   });
@@ -2008,3 +2660,594 @@ init();
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }
+
+window.CombusplusNativeMap = {
+  openStation(stationId) {
+    const station = state.stations.find(item => String(item.id) === String(stationId));
+    if (station) openStationDetail(station);
+  }
+};
+
+let nativeMapSyncTimer = 0;
+let nativeMapAnimationFrame = 0;
+
+const syncNativeMapPosition = () => {
+  if (!isNative()) return;
+
+  cancelAnimationFrame(nativeMapAnimationFrame);
+  nativeMapAnimationFrame = requestAnimationFrame(() => {
+    const activeMap = document.querySelector(
+      '.page.is-active[data-page="map"]'
+    );
+
+    if (!activeMap) {
+      try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+      return;
+    }
+
+    renderNativeEmbeddedMap();
+  });
+};
+
+const scheduleNativeMapSync = () => {
+  if (!isNative()) return;
+
+  clearTimeout(nativeMapSyncTimer);
+  nativeMapSyncTimer = window.setTimeout(
+    syncNativeMapPosition,
+    140
+  );
+};
+
+el.stationDialog?.addEventListener('close', () => {
+  if (document.querySelector('.page.is-active[data-page="map"]')) renderMap();
+});
+window.addEventListener(
+  'resize',
+  syncNativeMapPosition
+);
+window.addEventListener(
+  'scroll',
+  syncNativeMapPosition,
+  { passive: true, capture: true }
+);
+document.addEventListener(
+  'scroll',
+  syncNativeMapPosition,
+  { passive: true, capture: true }
+);
+window.visualViewport?.addEventListener(
+  'resize',
+  syncNativeMapPosition
+);
+window.visualViewport?.addEventListener(
+  'scroll',
+  syncNativeMapPosition
+);
+document.addEventListener('click', event => {
+  const nav = event.target.closest('[data-nav]');
+  if (nav?.dataset.nav !== 'map') {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+  }
+});
+
+
+el.mapOpenOnly?.addEventListener('change', () => {
+  const modalOpen = Boolean(
+    el.stationDialog?.open ||
+    document.querySelector('dialog[open], .modal.is-open, .sheet.is-open, [aria-modal="true"]')
+  );
+  if (modalOpen) {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+    return;
+  }
+  renderMap();
+});
+
+
+const nativeMapModalObserver = new MutationObserver(() => {
+  const dialogOpen = Boolean(
+    el.stationDialog?.open ||
+    document.querySelector('dialog[open], .modal.is-open, .sheet.is-open, [aria-modal="true"]')
+  );
+  if (dialogOpen) {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+    return;
+  }
+  if (document.querySelector('.page.is-active[data-page="map"], #page-map.is-active')) {
+    window.setTimeout(() => scheduleNativeMapSync(), 140);
+  }
+});
+nativeMapModalObserver.observe(document.body, {
+  subtree: true,
+  childList: true,
+  attributes: true,
+  attributeFilter: ['open', 'class', 'aria-hidden', 'aria-modal']
+});
+
+
+function syncMapAgainstOverlays() {
+  if (!isNative()) return;
+  const open = Boolean(document.querySelector(
+    'dialog[open], .modal.is-open, .sheet.is-open, .station-dialog[open], [data-station-detail].is-open'
+  ));
+  if (open) {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+    return;
+  }
+  if (document.querySelector('.page.is-active[data-page="map"]')) {
+    window.setTimeout(() => scheduleNativeMapSync(), 120);
+  }
+}
+
+new MutationObserver(syncMapAgainstOverlays).observe(document.body, {
+  subtree: true,
+  childList: true,
+  attributes: true,
+  attributeFilter: ['open', 'class', 'hidden', 'aria-hidden']
+});
+
+
+function applyTransparentHeaderLogoV968() {
+  document.querySelectorAll(
+    '.app-brand img, .brand img, .topbar img, header img[alt="Combusplus"], img[data-brand="combusplus"]'
+  ).forEach(img => {
+    if (!(img instanceof HTMLImageElement)) return;
+    img.src = 'assets/combusplus-header-logo.png';
+    img.alt = 'Combusplus';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', applyTransparentHeaderLogoV968);
+window.addEventListener('load', applyTransparentHeaderLogoV968);
+
+
+function enforceStaticBottomNavigationV97() {
+  const nav = document.querySelector('.bottom-nav');
+  if (!nav) return;
+  nav.hidden = false;
+  nav.removeAttribute('aria-hidden');
+  nav.style.display = 'grid';
+}
+
+document.addEventListener('DOMContentLoaded', enforceStaticBottomNavigationV97);
+window.addEventListener('load', enforceStaticBottomNavigationV97);
+new MutationObserver(enforceStaticBottomNavigationV97).observe(document.body, {
+  subtree: true,
+  attributes: true,
+  attributeFilter: ['class', 'hidden', 'style', 'aria-hidden']
+});
+
+
+/* Combusplus 9.8 */
+function syncMapScreenModeV98() {
+  const mapPage = document.querySelector(
+    '.page.is-active[data-page="map"]'
+  );
+  document.body.classList.toggle('cp-map-screen', Boolean(mapPage));
+
+  const nav = document.querySelector('.bottom-nav');
+  if (nav) {
+    nav.hidden = false;
+    nav.removeAttribute('aria-hidden');
+    nav.style.display = 'grid';
+  }
+
+  if (!mapPage) {
+    try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+  }
+}
+
+function syncFavoritesWidgetV98() {
+  if (!window.AndroidBridge?.syncNotificationConfig) return;
+
+  try {
+    const payload = {
+      enabled: Boolean(state.settings.notificationsEnabled),
+      intervalHours: Number(state.settings.notificationInterval || 6),
+      threshold: Number(state.settings.notificationThreshold || 0.001),
+      direction: state.settings.notificationDirection || 'both',
+      functionsUrl: state.settings.supabaseFunctionsUrl || '',
+      publishableKey: state.settings.supabasePublishableKey || '',
+      installationId: readStoredValue(STORAGE.installationId) || '',
+      sessionToken:
+        state.backendSession.token ||
+        readStoredValue(STORAGE.sessionToken) ||
+        '',
+      sessionExpiresAt: Number(
+        state.backendSession.expiresAt ||
+        readStoredValue(STORAGE.sessionExpiresAt) ||
+        0
+      ),
+      selectedVehicleId: state.selectedVehicleId,
+      vehicles: state.vehicles,
+      discounts: state.discounts,
+      favorites: state.favorites.map(favorite => ({
+        id: favorite.id,
+        name: favorite.name,
+        address: favorite.address,
+        latitude: favorite.latitude,
+        longitude: favorite.longitude,
+        watchFuel:
+          favorite.watchFuel ||
+          state.filters.fuelKey,
+        lastPrice: favorite.lastPrice,
+        lastChange: favorite.lastChange,
+        lastChecked: favorite.lastChecked,
+        notifications: favorite.notifications !== false
+      }))
+    };
+
+    window.AndroidBridge.syncNotificationConfig(
+      JSON.stringify(payload)
+    );
+  } catch {
+  }
+}
+
+let fullTankWidgetHandledV98 = false;
+async function executeFullTankWidgetSearchV98() {
+  if (fullTankWidgetHandledV98) return;
+
+  let requested = false;
+  try {
+    requested = Boolean(
+      window.AndroidBridge?.consumeFullTankLaunch?.()
+    );
+  } catch {
+    requested = false;
+  }
+
+  if (!requested) return;
+  fullTankWidgetHandledV98 = true;
+
+  document.querySelector('[data-nav="list"]')?.click();
+
+  const fullTankRadio = document.querySelector(
+    'input[name="searchMode"][value="fullTank"]'
+  );
+  if (fullTankRadio) {
+    fullTankRadio.checked = true;
+    fullTankRadio.dispatchEvent(
+      new Event('change', { bubbles: true })
+    );
+  }
+
+  window.setTimeout(() => {
+    const form = document.querySelector('#quickSearchForm');
+    if (form?.requestSubmit) {
+      form.requestSubmit();
+    } else {
+      document.querySelector('#quickSearchButton')?.click();
+    }
+  }, 350);
+}
+
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-nav]')) {
+    window.setTimeout(syncMapScreenModeV98, 20);
+  }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  syncMapScreenModeV98();
+  syncFavoritesWidgetV98();
+  window.setTimeout(executeFullTankWidgetSearchV98, 450);
+});
+
+window.addEventListener('load', () => {
+  syncMapScreenModeV98();
+  syncFavoritesWidgetV98();
+  window.setTimeout(executeFullTankWidgetSearchV98, 250);
+});
+
+window.addEventListener('hashchange', () => {
+  window.setTimeout(syncMapScreenModeV98, 20);
+});
+
+new MutationObserver(syncMapScreenModeV98).observe(
+  document.body,
+  {
+    subtree:true,
+    attributes:true,
+    attributeFilter:['class','hidden','style','aria-hidden']
+  }
+);
+
+
+/* Combusplus 9.9 */
+function applyExactShellMetricsV99() {
+  const header = document.querySelector('.app-header');
+  const nav = document.querySelector('.bottom-nav');
+  const root = document.documentElement;
+
+  const headerHeight = header && getComputedStyle(header).display !== 'none'
+    ? Math.ceil(header.getBoundingClientRect().height)
+    : 0;
+  const navHeight = nav
+    ? Math.ceil(nav.getBoundingClientRect().height)
+    : 76;
+
+  root.style.setProperty('--cp-live-header', `${headerHeight}px`);
+  root.style.setProperty('--cp-live-nav', `${Math.max(64, navHeight)}px`);
+
+  const mapActive = Boolean(
+    document.querySelector('.page.is-active[data-page="map"]')
+  );
+  document.body.classList.toggle('cp-map-screen', mapActive);
+
+  if (nav) {
+    nav.hidden = false;
+    nav.style.display = 'grid';
+    nav.style.visibility = 'visible';
+  }
+
+  if (mapActive) {
+    window.setTimeout(() => {
+      try { scheduleNativeMapSync(); } catch {}
+    }, 40);
+  }
+}
+
+let shellMetricFrameV99 = 0;
+function scheduleExactShellMetricsV99() {
+  cancelAnimationFrame(shellMetricFrameV99);
+  shellMetricFrameV99 = requestAnimationFrame(applyExactShellMetricsV99);
+}
+
+document.addEventListener('DOMContentLoaded', scheduleExactShellMetricsV99);
+window.addEventListener('load', scheduleExactShellMetricsV99);
+window.addEventListener('resize', scheduleExactShellMetricsV99);
+window.visualViewport?.addEventListener('resize', scheduleExactShellMetricsV99);
+window.addEventListener('hashchange', scheduleExactShellMetricsV99);
+
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-nav]')) {
+    window.setTimeout(scheduleExactShellMetricsV99, 10);
+  }
+});
+
+new ResizeObserver(scheduleExactShellMetricsV99).observe(
+  document.querySelector('.app-shell') || document.body
+);
+
+
+/* Combusplus 10.1: sincronización exacta del mapa nativo */
+let nativeMapFrameV101 = 0;
+function scheduleExactNativeMapV101() {
+  cancelAnimationFrame(nativeMapFrameV101);
+  nativeMapFrameV101 = requestAnimationFrame(() => {
+    const active = document.querySelector(
+      '.page.is-active[data-page="map"]'
+    );
+    const dialogOpen = Boolean(document.querySelector('dialog[open]'));
+
+    if (!active || dialogOpen) {
+      try { window.AndroidBridge?.hideNativeMap?.(); } catch {}
+      return;
+    }
+
+    renderNativeEmbeddedMap();
+  });
+}
+
+window.addEventListener(
+  'scroll',
+  scheduleExactNativeMapV101,
+  { passive:true, capture:true }
+);
+document.addEventListener(
+  'scroll',
+  scheduleExactNativeMapV101,
+  { passive:true, capture:true }
+);
+window.addEventListener('resize', scheduleExactNativeMapV101);
+window.visualViewport?.addEventListener(
+  'resize',
+  scheduleExactNativeMapV101
+);
+window.visualViewport?.addEventListener(
+  'scroll',
+  scheduleExactNativeMapV101
+);
+window.addEventListener('hashchange', scheduleExactNativeMapV101);
+
+document.addEventListener('click', event => {
+  if (
+    event.target.closest('[data-nav]')
+    || event.target.closest('[data-close-dialog]')
+  ) {
+    window.setTimeout(scheduleExactNativeMapV101, 40);
+  }
+});
+
+new MutationObserver(scheduleExactNativeMapV101).observe(
+  document.body,
+  {
+    subtree:true,
+    attributes:true,
+    attributeFilter:['class', 'open', 'hidden', 'aria-hidden']
+  }
+);
+
+try {
+  window.AndroidBridge?.hideNativeMap?.();
+} catch {
+}
+
+window.addEventListener('scroll', () => {
+  try {
+    window.AndroidBridge?.hideNativeMap?.();
+  } catch {
+  }
+}, { passive:true });
+
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-nav]')) {
+    try {
+      window.AndroidBridge?.hideNativeMap?.();
+    } catch {
+    }
+  }
+});
+
+
+/* Combusplus 10.3: desbloqueo definitivo de la pantalla Mapa */
+function normalizeMapScrollV103() {
+  const mapPage = document.querySelector(
+    '.page.is-active[data-page="map"]'
+  );
+
+  if (!mapPage) return;
+
+  document.documentElement.style.overflowY = 'auto';
+  document.body.style.overflowY = 'auto';
+  document.body.style.height = 'auto';
+  document.body.style.minHeight = '100%';
+
+  const shell = document.querySelector('.app-shell');
+  const main = document.querySelector('main');
+
+  if (shell) {
+    shell.style.height = 'auto';
+    shell.style.minHeight = '100dvh';
+    shell.style.overflow = 'visible';
+  }
+
+  if (main) {
+    main.style.height = 'auto';
+    main.style.minHeight = '0';
+    main.style.overflow = 'visible';
+  }
+
+  try {
+    window.AndroidBridge?.hideNativeMap?.();
+  } catch {
+  }
+}
+
+document.addEventListener(
+  'DOMContentLoaded',
+  normalizeMapScrollV103
+);
+window.addEventListener('load', normalizeMapScrollV103);
+window.addEventListener('hashchange', () => {
+  window.setTimeout(normalizeMapScrollV103, 30);
+});
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-nav]')) {
+    window.setTimeout(normalizeMapScrollV103, 30);
+  }
+});
+
+
+/* Combusplus 10.5: buscadores y filtros */
+let mapSearchTimerV105 = 0;
+
+el.mapSearch?.addEventListener('input', () => {
+  window.clearTimeout(mapSearchTimerV105);
+  mapSearchTimerV105 = window.setTimeout(
+    () => renderMap(false),
+    220
+  );
+});
+
+el.mapSearch?.addEventListener('search', () => {
+  renderMap(false);
+});
+
+el.clearMapSearch?.addEventListener('click', () => {
+  if (el.mapSearch) {
+    el.mapSearch.value = '';
+    el.mapSearch.focus();
+  }
+  renderMap(false);
+});
+
+el.mapOpenOnly?.addEventListener('change', () => {
+  renderMap(false);
+});
+
+el.quickStationQuery?.addEventListener('input', () => {
+  state.filters.stationQuery =
+    el.quickStationQuery.value.trim();
+  saveFilters();
+});
+
+el.quickOpenOnly?.addEventListener('change', () => {
+  state.filters.searchOpenOnly =
+    Boolean(el.quickOpenOnly.checked);
+  saveFilters();
+});
+
+function restoreSearchFiltersV105() {
+  if (el.quickStationQuery) {
+    el.quickStationQuery.value =
+      state.filters.stationQuery || '';
+  }
+  if (el.quickOpenOnly) {
+    el.quickOpenOnly.checked =
+      Boolean(state.filters.searchOpenOnly);
+  }
+}
+
+document.addEventListener(
+  'DOMContentLoaded',
+  () => window.setTimeout(
+    restoreSearchFiltersV105,
+    0
+  )
+);
+
+window.addEventListener(
+  'load',
+  restoreSearchFiltersV105
+);
+
+
+/* Combusplus 10.6: destino y desvío */
+function restoreRouteSearchV106() {
+  if (el.quickDestination) {
+    el.quickDestination.value =
+      state.filters.destination || '';
+  }
+
+  if (el.quickRadius) {
+    const value =
+      Number(state.filters.maxDetourKm) ||
+      Number(state.filters.radius) ||
+      5;
+    el.quickRadius.value = String(value);
+  }
+}
+
+el.quickDestination?.addEventListener(
+  'change',
+  () => {
+    state.filters.destination =
+      el.quickDestination.value.trim();
+    saveFilters();
+  }
+);
+
+el.quickRadius?.addEventListener(
+  'change',
+  () => {
+    state.filters.maxDetourKm =
+      Number(el.quickRadius.value) || 5;
+    saveFilters();
+  }
+);
+
+document.addEventListener(
+  'DOMContentLoaded',
+  () => window.setTimeout(
+    restoreRouteSearchV106,
+    0
+  )
+);
+
+window.addEventListener(
+  'load',
+  restoreRouteSearchV106
+);

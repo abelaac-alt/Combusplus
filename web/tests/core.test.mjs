@@ -6,8 +6,16 @@ import {
   rankNormalizedStations,
   rankFullTankStations,
   equivalentSaving,
-  scoreNormalizedStation
+  scoreNormalizedStation,
+  parseNumeric,
+  mapsUrl,
+  priceRange
 } from '../src/core.js';
+
+assert.equal(parseNumeric(' 1,659 € '), 1.659);
+assert.equal(parseNumeric(''), null);
+assert.equal(parseNumeric(null), null);
+assert.deepEqual(extractStationArray({ data: { stations: [{ id: 1 }] } }), [{ id: 1 }]);
 
 const origin = { latitude: 37.39, longitude: -5.98 };
 const payload = { items: [
@@ -18,6 +26,7 @@ const payload = { items: [
 assert.equal(extractStationArray(payload).length, 2);
 const stations = payload.items.map(item => normalizeStationForList(item, origin));
 assert.equal(stations[0].isOpen, true);
+assert.equal(normalizeStationForList({ rotulo: 'Sin distancia' }, null), null);
 assert.equal(
   personalPrice(stations[0], 'Gasolina95', [{ fuelKey: 'Gasolina95', type: 'perLiter', value: .05, stationMatch: '' }]),
   1.65
@@ -61,5 +70,11 @@ const best = fullTank[0];
 const sameUsefulLitersCostAtSelected = selected.effectivePrice * best.netLiters;
 const sameUsefulLitersCostAtBest = best.effectivePrice * best.netLiters;
 assert.ok(sameUsefulLitersCostAtSelected >= sameUsefulLitersCostAtBest);
+assert.deepEqual(priceRange(stations, 'Gasolina95'), { min: 1.61, max: 1.7 });
+assert.match(mapsUrl(stations[0]), /^https:\/\/www\.google\.com\/maps\/dir\//);
+assert.match(
+  mapsUrl({ name: 'Estación prueba', address: 'Sevilla' }),
+  /maps\/search/
+);
 
 console.log('Tests correctos · importe, depósito, ida, ida y vuelta y comparación');

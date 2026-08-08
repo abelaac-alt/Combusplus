@@ -1,4 +1,4 @@
-const CACHE = 'combusplus-v9-2';
+const CACHE = 'combusplus-v10-6-3';
 const SHELL = [
   './',
   './index.html',
@@ -37,7 +37,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request, { cache: 'no-store' })
         .catch(() => new Response(
-          "window.COMBUSPLUS_CONFIG = Object.freeze({version:'9.0.0'});",
+          "window.COMBUSPLUS_CONFIG = Object.freeze({version:'10.6.3'});",
           { headers: { 'content-type': 'application/javascript; charset=utf-8' } }
         ))
     );

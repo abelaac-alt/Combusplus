@@ -70,6 +70,7 @@ function text(value: unknown, max = 180): string {
 }
 
 function finite(value: unknown): number | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -116,13 +117,17 @@ export function normalizeSnapshot(item: Record<string, unknown>): StationView | 
   const latitude = finite(item.latitud);
   const longitude = finite(item.longitud);
   const distanceKm = finite(item.distancia);
-  if (latitude == null || longitude == null || distanceKm == null) return null;
+  if (
+    latitude == null || latitude < -90 || latitude > 90 ||
+    longitude == null || longitude < -180 || longitude > 180 ||
+    distanceKm == null || distanceKm < 0
+  ) return null;
   const fuels = FUEL_KEYS.map((key) => {
     const price = finite(item[key]);
     return price != null && price > 0 && price < 10 ? { key, label: labels[key], price } : null;
   }).filter(Boolean) as StationView['fuels'];
   return {
-    id: text(item.idEstacion, 200),
+    id: text(item.idEstacion, 200) || `${latitude.toFixed(6)}:${longitude.toFixed(6)}`,
     name: text(item.rotulo || item.marca || 'Gasolinera', 150),
     brand: text(item.marca || item.rotulo || '', 120),
     address: text(item.direccion || 'Dirección no disponible', 220),

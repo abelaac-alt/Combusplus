@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
       sessionToken: session.token,
       expiresAt: session.expiresAt,
       integrity: integrity.level,
-      backendVersion: '9.0.0',
+      backendVersion: '10.6.3',
     });
   } catch (error) {
     return jsonResponse(req, { ok: false, error: safeError(error) }, 400);

@@ -95,6 +95,7 @@ const MAX_MATRIX_CANDIDATES = 14;
 const ROUTES_BASE_URL = 'https://routes.googleapis.com';
 
 function finite(value: unknown): number | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }

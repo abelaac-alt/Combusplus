@@ -1,4 +1,4 @@
-# Combusplus 9.0
+# Combusplus 10.6.3
 
 Combusplus busca la gasolinera más rentable según el precio, la distancia, el consumo real del vehículo, el importe o depósito completo, los descuentos y el trayecto de ida o ida y vuelta.
 
@@ -23,6 +23,20 @@ Combusplus busca la gasolinera más rentable según el precio, la distancia, el 
 ## Instalación
 
 Consulta [docs/INSTALLATION_V9.md](docs/INSTALLATION_V9.md).
+
+Validación local rápida:
+
+```text
+cd web
+npm ci
+npm run check
+
+cd ../android
+./gradlew :app:lintDebug :app:assembleDebug
+```
+
+Las funciones Supabase se validan con `deno check supabase/functions/**/*.ts`
+y `deno test supabase/tests`.
 
 ## Publicación
 

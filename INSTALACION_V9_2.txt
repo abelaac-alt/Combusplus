@@ -3,8 +3,7 @@ COMBUSPLUS 9.2 · ACTUALIZACIÓN
 1. Sube todo el contenido de este paquete a la raíz del repositorio.
 2. En GitHub crea el secreto:
    COMBUSPLUS_ADMIN_TOKEN
-   Valor:
-   zVHGW2cn8lPRzR1EOKlA566BYo3f_yUnVGnmGWad-w4s6cs6KO_WupzDVKTawu6U
+   Valor: genera uno nuevo de al menos 32 caracteres y no lo guardes en el repositorio.
 
 3. Ejecuta:
    - Validar proyecto

@@ -51,6 +51,20 @@ def main() -> None:
         if b"googleMapId: ''" not in config:
             fail("El Map ID web no debe estar dentro del APK/AAB")
 
+        app_names = [
+            name for name in names
+            if name.lower().endswith("assets/www/src/app.js")
+        ]
+        if not app_names:
+            fail("No se encontró assets/www/src/app.js")
+
+        app_source = archive.read(app_names[0])
+        if (
+            b"renderNativeMapV2" not in app_source
+            or b"if (renderNativeEmbeddedMap())" not in app_source
+        ):
+            fail("La integración segura del mapa nativo no está incluida")
+
         for name in names:
             lower = name.lower()
             if not lower.endswith((".js", ".html", ".json", ".txt", ".xml")):

@@ -1,10 +1,14 @@
 {
   "name": "combusplus-web",
-  "version": "9.0.0",
+  "version": "10.6.3",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node tests/core.test.mjs",
+    "check": "npm test && node --check src/app.js && node --check src/core.js && node --check src/admin-analytics.js && node --check sw.js && node --check config.js && html-validate index.html privacy.html admin-analytics.html",
     "serve": "python -m http.server 8080"
+  },
+  "devDependencies": {
+    "html-validate": "11.6.2"
   }
 }

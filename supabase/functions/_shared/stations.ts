@@ -59,8 +59,9 @@ function byAliases(raw: JsonRecord, aliases: string[]): unknown {
 
 function numberValue(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const parsed = Number(String(value ?? '')
-    .trim()
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const parsed = Number(text
     .replace(',', '.')
     .replace(/[^0-9.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : null;
