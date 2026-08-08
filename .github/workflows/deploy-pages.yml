@@ -47,7 +47,7 @@ jobs:
         run: |
           cat > web/config.js <<EOF_CONFIG
           window.COMBUSPLUS_CONFIG = Object.freeze({
-            version: '9.0.0',
+            version: '10.6.3',
             supabaseFunctionsUrl: '${FUNCTIONS_URL}',
             supabasePublishableKey: '${PUBLISHABLE_KEY}',
             googleMapsKey: '${GOOGLE_MAPS_KEY}',

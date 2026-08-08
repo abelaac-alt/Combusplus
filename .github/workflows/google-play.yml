@@ -53,48 +53,6 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v6
 
-      - name: Aplicar mapa integrado
-        run: python scripts/apply-embedded-map-patch.py
-
-      - name: Fijar mapa dentro del recuadro
-        run: python scripts/fix-embedded-map-position.py
-
-      - name: Optimizar mapa y cargar cercanas
-        run: python scripts/optimize-nearby-map.py
-
-      - name: Aplicar marcadores de precio y filtro
-        run: python scripts/fix-map-price-markers-and-filter.py
-
-      - name: Aplicar marco exacto y logotipos
-        run: python scripts/fix-perfect-map-frame-and-branding.py
-
-      - name: Fijar menú, eliminar hueco y renovar widgets
-        run: python scripts/fix-static-nav-gap-and-widgets.py
-
-      - name: Corregir mapa estático y widgets
-        run: python scripts/fix-map-static-and-widget-actions.py
-
-      - name: Corregir diseño final del mapa
-        run: python scripts/fix-perfect-static-map-layout.py
-
-      - name: Aplicar corrección exacta 10.1
-        run: python scripts/apply-v101-exact-map.py
-
-      - name: Aplicar solución web 10.2
-        run: python scripts/apply-v102-web-map.py
-
-      - name: Corregir error y scroll 10.3
-        run: python scripts/apply-v103-fix-error-scroll.py
-
-      - name: Corregir cabecera y carga del mapa 10.4
-        run: python scripts/apply-v104-header-map-load.py
-
-      - name: Aplicar buscadores, filtros y descuentos 10.5
-        run: python scripts/apply-v105-search-filters-discounts.py
-
-      - name: Aplicar búsqueda rentable por ruta 10.6.3
-        run: python scripts/run-v106-safe.py
-
       - name: Configurar Node 24
         uses: actions/setup-node@v7
         with:
@@ -107,9 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          npm test
-          node --check src/app.js
-          node --check src/core.js
+          npm run check
 
       - name: Configurar Java 17
         uses: actions/setup-java@v5
@@ -126,10 +82,8 @@ jobs:
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Configurar Gradle 9.4.1
+      - name: Configurar caché de Gradle
         uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: "9.4.1"
 
       - name: Validar variables y secretos
         env:
@@ -143,7 +97,6 @@ jobs:
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
           MAPS_ANDROID_KEY: ${{ vars.GOOGLE_MAPS_ANDROID_API_KEY }}
           MAPS_ANDROID_ID: ${{ vars.GOOGLE_MAPS_ANDROID_MAP_ID }}
-          MAPS_WEB_KEY: ${{ vars.GOOGLE_MAPS_WEB_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -156,7 +109,6 @@ jobs:
             PUBLISHABLE_KEY
             MAPS_ANDROID_KEY
             MAPS_ANDROID_ID
-            MAPS_WEB_KEY
           )
 
           for name in "${required[@]}"; do
@@ -206,12 +158,11 @@ jobs:
           PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
           MAPS_ANDROID_KEY: ${{ vars.GOOGLE_MAPS_ANDROID_API_KEY }}
           MAPS_ANDROID_ID: ${{ vars.GOOGLE_MAPS_ANDROID_MAP_ID }}
-          MAPS_WEB_KEY: ${{ vars.GOOGLE_MAPS_WEB_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
           PLAY_PROJECT_NUMBER: ${{ vars.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER }}
         run: |
           set -euo pipefail
 
-          gradle :app:bundleRelease             --stacktrace             --no-daemon             --no-configuration-cache             -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL"             -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY"             -PGOOGLE_MAPS_ANDROID_API_KEY="$MAPS_ANDROID_KEY"             -PGOOGLE_MAPS_ANDROID_MAP_ID="$MAPS_ANDROID_ID"             -PGOOGLE_MAPS_WEB_API_KEY="$MAPS_WEB_KEY"             -PCOMBUSPLUS_VERSION_CODE="${{ inputs.version_code }}"             -PCOMBUSPLUS_VERSION_NAME="${{ inputs.version_name }}"             -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
+          ./gradlew :app:bundleRelease             --stacktrace             --no-daemon             --no-configuration-cache             -PCOMBUSPLUS_FUNCTIONS_URL="$FUNCTIONS_URL"             -PCOMBUSPLUS_PUBLISHABLE_KEY="$PUBLISHABLE_KEY"             -PGOOGLE_MAPS_ANDROID_API_KEY="$MAPS_ANDROID_KEY"             -PGOOGLE_MAPS_ANDROID_MAP_ID="$MAPS_ANDROID_ID"             -PCOMBUSPLUS_VERSION_CODE="${{ inputs.version_code }}"             -PCOMBUSPLUS_VERSION_NAME="${{ inputs.version_name }}"             -PPLAY_INTEGRITY_CLOUD_PROJECT_NUMBER="${PLAY_PROJECT_NUMBER:-0}"
 
       - name: Verificar firma del AAB
         run: |
@@ -219,6 +170,9 @@ jobs:
           AAB="android/app/build/outputs/bundle/release/app-release.aab"
           test -s "$AAB"
           jarsigner -verify -certs "$AAB"
+
+      - name: Comprobar seguridad del AAB
+        run: python scripts/check-android-artifact.py android/app/build/outputs/bundle/release/app-release.aab
 
       - name: Preparar archivos de Google Play
         run: |

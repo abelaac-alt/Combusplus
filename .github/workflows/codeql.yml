@@ -52,7 +52,6 @@ jobs:
         if: matrix.language == 'java-kotlin'
         uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: "9.4.1"
           cache-disabled: true
 
       - name: Inicializar CodeQL
@@ -69,7 +68,7 @@ jobs:
             -Dorg.gradle.configuration-cache=false
             -Dorg.gradle.caching=false
         run: |
-          gradle :app:assembleDebug \
+          ./gradlew :app:assembleDebug \
             --stacktrace \
             --no-daemon \
             --no-configuration-cache \
