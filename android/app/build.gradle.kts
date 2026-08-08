@@ -120,7 +120,7 @@ android {
 
 dependencies {
     implementation("androidx.activity:activity:1.12.4")
-    implementation("androidx.core:core:1.17.0")
+    implementation("androidx.core:core:1.19.0")
     implementation("androidx.work:work-runtime:2.11.2")
     implementation("androidx.webkit:webkit:1.16.0")
     implementation("androidx.car.app:app:1.7.0")
